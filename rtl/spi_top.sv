@@ -1,15 +1,19 @@
 // -----------------------------------------------------------------------------
 // spi_top.sv  -  Alias wrapper to spi_master_top for backward compatibility
+//
+// Exposes the same interface as spi_master_top, including select_error.
+// This module is a transparent pass-through; it generates no additional logic.
 // -----------------------------------------------------------------------------
 module spi_top
   import spi_pkg::*;
 #(
   parameter int DATA_WIDTH       = 8,
-  parameter int CLOCK_DIVIDER    = 4,
+  parameter int CLOCK_DIVIDER    = 6,
   parameter int SPI_MODE         = 0,
   parameter int NUM_SLAVES       = 1,
-  parameter int MISO_SYNC_STAGES = 1,
-  parameter bit ENABLE_PERF      = 1'b1
+  parameter int MISO_SYNC_STAGES = 2,
+  parameter bit ENABLE_PERF      = 1'b1,
+  parameter bit LSB_FIRST        = 1'b0
 )(
   input  logic                              clk,
   input  logic                              reset,
@@ -20,6 +24,7 @@ module spi_top
   output logic                              busy,
   output logic                              done,
   output logic                              error,
+  output logic                              select_error,
   output logic                              transfer_active,
   output logic                              sclk,
   output logic                              mosi,
@@ -40,10 +45,12 @@ module spi_top
     .SPI_MODE(SPI_MODE),
     .NUM_SLAVES(NUM_SLAVES),
     .MISO_SYNC_STAGES(MISO_SYNC_STAGES),
-    .ENABLE_PERF(ENABLE_PERF)
+    .ENABLE_PERF(ENABLE_PERF),
+    .LSB_FIRST(LSB_FIRST)
   ) u_impl (
     .clk, .reset, .start, .tx_data, .slave_select, .rx_data,
-    .busy, .done, .error, .transfer_active, .sclk, .mosi, .miso, .cs_n,
+    .busy, .done, .error, .select_error, .transfer_active,
+    .sclk, .mosi, .miso, .cs_n,
     .perf_clear, .perf_txn_count, .perf_bits_total, .perf_busy_cycles,
     .perf_total_cycles, .perf_last_latency, .perf_last_sclk_cycles, .perf_reject_count
   );

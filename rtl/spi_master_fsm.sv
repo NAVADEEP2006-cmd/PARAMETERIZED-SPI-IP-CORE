@@ -59,6 +59,7 @@ module spi_master_fsm (
   assign run       = (state == S_TRANSFER) || (state == S_DESELECT);
   assign sclk_en   = (state == S_TRANSFER);
   assign capture   = (state == S_DESELECT) && tick;
+  assign tx_clear  = (state == S_DONE);
   assign busy      = (state != S_IDLE) && (state != S_DONE);
   assign done      = (state == S_DONE);
 endmodule

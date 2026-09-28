@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// spi_perf_counters.sv  -  Optional QoS / performance measurement hooks
+// spi_perf_counters.sv  -  Optional performance / diagnostic measurement hooks
 //
 // All counters are 32-bit, free-running, wrap on overflow, cleared by `clear`
 // (or reset). Clearing during a transaction corrupts that one transaction's
@@ -8,12 +8,19 @@
 //   bits_total     txn_count * DATA_WIDTH
 //   busy_cycles    cycles with busy=1          -> utilization = busy/total
 //   total_cycles   cycles since clear          (observation window)
-//   last_latency   busy cycles of the last transaction (accepted start -> done)
-//                  = 2*W*D + D + 2 (see docs)
+//   last_latency   cycles of the last transaction from S_SELECT entry to done
+//                  pulse (inclusive). The FSM sets busy=0 and done=1 in the
+//                  same S_DONE cycle, so last_latency includes all active
+//                  states + the done cycle itself.
+//                  Expected value: 2*W*D + D + 2  (see docs)
 //   last_sclk_cycles cycles SCLK was toggling in the last transaction = 2*W*D
-//                  -> chip-select/FSM overhead = last_latency - last_sclk_cycles
+//                  -> CS/FSM overhead = last_latency - last_sclk_cycles
 //   reject_count   rejected start requests (error pulses)
 // ENABLE=0 ties every output to 0 and generates no logic.
+//
+// Note: These are performance/diagnostic counters, not QoS arbitration logic.
+// They measure and report timing characteristics but do not enforce any
+// quality-of-service guarantees or priority schemes.
 // -----------------------------------------------------------------------------
 module spi_perf_counters #(
   parameter bit ENABLE     = 1'b1,

@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// spi_master_top.sv  -  Parameterized SPI IP: top level (master side + QoS hooks)
+// spi_master_top.sv  -  Parameterized SPI IP: top level (master + perf counters)
 //
 //   host logic --start/tx_data/slave_select--> [ spi_master ] --sclk/mosi/cs_n--> slave(s)
 //              <--rx_data/busy/done/error----- [            ] <--miso------------
@@ -11,11 +11,12 @@ module spi_master_top
   import spi_pkg::*;
 #(
   parameter int DATA_WIDTH       = 8,
-  parameter int CLOCK_DIVIDER    = 4,
+  parameter int CLOCK_DIVIDER    = 6,
   parameter int SPI_MODE         = 0,
   parameter int NUM_SLAVES       = 1,
-  parameter int MISO_SYNC_STAGES = 1,
-  parameter bit ENABLE_PERF      = 1'b1
+  parameter int MISO_SYNC_STAGES = 2,
+  parameter bit ENABLE_PERF      = 1'b1,
+  parameter bit LSB_FIRST        = 1'b0
 )(
   input  logic                              clk,
   input  logic                              reset,        // sync, active high
@@ -34,7 +35,7 @@ module spi_master_top
   output logic                              mosi,
   input  logic                              miso,
   output logic [NUM_SLAVES-1:0]             cs_n,
-  // performance / QoS hooks
+  // performance / diagnostic counter hooks
   input  logic                              perf_clear,
   output logic [31:0]                       perf_txn_count,
   output logic [31:0]                       perf_bits_total,
@@ -50,7 +51,7 @@ module spi_master_top
 
   spi_master #(
     .DATA_WIDTH(DATA_WIDTH), .CLOCK_DIVIDER(CLOCK_DIVIDER), .SPI_MODE(SPI_MODE),
-    .NUM_SLAVES(NUM_SLAVES), .MISO_SYNC_STAGES(MISO_SYNC_STAGES)
+    .NUM_SLAVES(NUM_SLAVES), .MISO_SYNC_STAGES(MISO_SYNC_STAGES), .LSB_FIRST(LSB_FIRST)
   ) u_master (
     .clk, .reset, .start, .tx_data, .slave_select, .rx_data,
     .busy, .done, .error, .select_error, .transfer_active, .txn_accept(txn_accept_unused),

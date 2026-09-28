@@ -7,7 +7,8 @@
 module spi_slave_top #(
   parameter int DATA_WIDTH  = 8,
   parameter int SPI_MODE    = 0,
-  parameter int SYNC_STAGES = 2
+  parameter int SYNC_STAGES = 2,
+  parameter bit LSB_FIRST   = 1'b0
 )(
   input  logic                  clk,
   input  logic                  reset,
@@ -26,7 +27,8 @@ module spi_slave_top #(
   spi_slave #(
     .DATA_WIDTH (DATA_WIDTH),
     .SPI_MODE   (SPI_MODE),
-    .SYNC_STAGES(SYNC_STAGES)
+    .SYNC_STAGES(SYNC_STAGES),
+    .LSB_FIRST  (LSB_FIRST)
   ) u_slave (
     .clk, .reset, .sclk, .mosi, .cs_n, .miso_o, .miso_oe,
     .tx_data, .rx_data, .rx_valid, .busy, .frame_error

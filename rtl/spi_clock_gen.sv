@@ -23,7 +23,7 @@
 module spi_clock_gen
   import spi_pkg::*;
 #(
-  parameter int CLOCK_DIVIDER = 4,
+  parameter int CLOCK_DIVIDER = 6,
   parameter int SPI_MODE      = 0
 )(
   input  logic clk,

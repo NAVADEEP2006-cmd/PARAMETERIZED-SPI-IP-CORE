@@ -2,18 +2,25 @@
 // spi_slave.sv  -  Complete SPI slave, fully synchronous to a local clock
 //
 // Architecture: SCLK, CS_N and MOSI are treated as asynchronous inputs, passed
-// through 2-FF synchronizers and edge-detected in the local `clk` domain. No
-// derived clocks, no multi-clock timing problems, same code for FPGA and ASIC.
+// through SYNC_STAGES-FF synchronizers and edge-detected in the local `clk`
+// domain. No derived clocks, no multi-clock timing problems, same code for
+// FPGA and ASIC.
 //
-// Constraint: local clk must oversample SCLK. Hard minimum: SCLK half period
-// >= 2 local clocks (f_clk >= 4*f_sclk) for reception. For a full-duplex
-// loopback with spi_master (MISO returns ~4 clocks after the SCLK edge) use
-// CLOCK_DIVIDER >= 6 (see docs). Edge detection adds ~3 clocks of latency.
+// Oversampling constraint: local clk must oversample SCLK. Hard minimum:
+//   f_clk >= 4 * f_sclk   (SCLK half period >= 2 local clock cycles)
+// For a full-duplex loopback with spi_master (MISO returns ~3 clocks after
+// the SCLK edge), use CLOCK_DIVIDER >= spi_min_divider(MISO_SYNC_STAGES)
+// (typically >= 5 for 2-stage sync). Edge detection adds ~SYNC_STAGES+1
+// clocks of latency to each SPI event.
 //
 // Timing (identical to the master's definitions)
 //   CPHA=0: sample MOSI on leading edge, shift MISO on trailing edge; first
 //           MISO bit is loaded when CS assertion is detected.
 //   CPHA=1: shift MISO on leading edge, sample MOSI on trailing edge.
+//
+// Bit order
+//   LSB_FIRST=0: MSB-first. bit[DATA_WIDTH-1] transmitted/received first.
+//   LSB_FIRST=1: LSB-first. bit[0] transmitted/received first.
 //
 // Frame handling
 //   CS falling  : tx_data is latched into the TX shift register, counters clear
@@ -31,7 +38,8 @@ module spi_slave
 #(
   parameter int DATA_WIDTH  = 8,
   parameter int SPI_MODE    = 0,
-  parameter int SYNC_STAGES = 2
+  parameter int SYNC_STAGES = 2,
+  parameter bit LSB_FIRST   = 1'b0
 )(
   input  logic                  clk,
   input  logic                  reset,
@@ -115,19 +123,29 @@ module spi_slave
       miso_r   <= 1'b0;
     end else if (cs_fall) begin
       if (CPHA == 1'b0) begin
-        miso_r   <= tx_data[DATA_WIDTH-1];
-        tx_shreg <= tx_data << 1;
+        miso_r   <= LSB_FIRST ? tx_data[0] : tx_data[DATA_WIDTH-1];
+        tx_shreg <= LSB_FIRST ? (tx_data >> 1) : (tx_data << 1);
       end else begin
         miso_r   <= 1'b0;
         tx_shreg <= tx_data;
       end
     end else if (shift_evt && !cs_s) begin
-      miso_r   <= tx_shreg[DATA_WIDTH-1];
-      tx_shreg <= tx_shreg << 1;
+      miso_r   <= LSB_FIRST ? tx_shreg[0] : tx_shreg[DATA_WIDTH-1];
+      tx_shreg <= LSB_FIRST ? (tx_shreg >> 1) : (tx_shreg << 1);
     end else if (cs_s) begin
       miso_r   <= 1'b0;
     end
   end
+
+  // LSB-first shift helper: handles DATA_WIDTH=1 safely
+  logic [DATA_WIDTH-1:0] rx_lsb_next;
+  generate
+    if (DATA_WIDTH == 1) begin : g_lsb_1b
+      assign rx_lsb_next = mosi_s;
+    end else begin : g_lsb_mb
+      assign rx_lsb_next = {mosi_s, rx_shreg[DATA_WIDTH-1:1]};
+    end
+  endgenerate
 
   // RX path + bit count
   always_ff @(posedge clk) begin
@@ -143,10 +161,16 @@ module spi_slave
 
       if (sample_evt && !cs_s) begin
         if (sample_cnt < W_CNT'(DATA_WIDTH)) begin
-          rx_shreg   <= (rx_shreg << 1) | DATA_WIDTH'(mosi_s);
+          if (LSB_FIRST)
+            rx_shreg <= rx_lsb_next;
+          else
+            rx_shreg <= (rx_shreg << 1) | DATA_WIDTH'(mosi_s);
           sample_cnt <= sample_cnt + 1'b1;
           if (sample_cnt == W_CNT'(DATA_WIDTH - 1)) begin
-            rx_data         <= (rx_shreg << 1) | DATA_WIDTH'(mosi_s);
+            if (LSB_FIRST)
+              rx_data <= rx_lsb_next;
+            else
+              rx_data <= (rx_shreg << 1) | DATA_WIDTH'(mosi_s);
             rx_valid        <= 1'b1;
             full_frame_seen <= 1'b1;
           end

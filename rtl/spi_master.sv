@@ -3,19 +3,21 @@
 //
 // Timing (T = CPHA):   leading edge = SCLK leaves idle, trailing = returns
 //   CPHA=0 : sample MISO on leading edge, shift MOSI on trailing edge;
-//            MOSI already shows bit[W-1] when CS falls (one half-period setup).
+//            MOSI already shows first-transmitted bit when CS falls (one
+//            half-period setup).
 //   CPHA=1 : shift MOSI on leading edge, sample MISO on trailing edge.
 // In every mode a frame ends at the W-th trailing edge (SCLK back at CPOL);
 // CS then stays low one more half-period before releasing.
 // All updates happen on the same system-clock edge as the SCLK toggle; MISO is
-// sampled through MISO_SYNC_STAGES flops (default 1).
+// sampled through MISO_SYNC_STAGES flops (default 2).
 //
 // Parameters
 //   DATA_WIDTH       bits per transaction (>=1)
-//   CLOCK_DIVIDER    SCLK = clk/(2*CLOCK_DIVIDER), >=1
+//   CLOCK_DIVIDER    SCLK = clk/(2*CLOCK_DIVIDER), >= spi_min_divider(MISO_SYNC_STAGES)
 //   SPI_MODE         0..3 = {CPOL,CPHA}
 //   NUM_SLAVES       number of cs_n lines (>=1)
 //   MISO_SYNC_STAGES input register stages on MISO (>=1)
+//   LSB_FIRST        0 = MSB-first (bit[W-1] first), 1 = LSB-first (bit[0] first)
 //
 // System side
 //   start          : request. Accepted only while busy=0 and slave_select valid.
@@ -23,10 +25,13 @@
 //   tx_data        : sampled on the accepted start cycle
 //   slave_select   : binary index, sampled on the accepted start cycle
 //   rx_data        : last received word, updated one cycle before `done`, held
-//   busy           : high from the cycle after accepted start through `done`
-//   done           : 1-cycle pulse, rx_data valid in that cycle (busy still 1)
+//   busy           : high during active transaction states (S_SELECT through
+//                    S_DESELECT); LOW during the done pulse cycle (S_DONE)
+//   done           : 1-cycle pulse, rx_data valid in that cycle
 //   error          : 1-cycle pulse when a NEW start (rising edge) is rejected
 //                    because busy=1 or slave_select >= NUM_SLAVES
+//   select_error   : 1-cycle pulse when a NEW start is rejected specifically
+//                    because slave_select >= NUM_SLAVES (not because of busy)
 //   transfer_active: SCLK is toggling
 //   txn_accept     : 1-cycle pulse when a start is accepted
 // Reset: synchronous, active high. SCLK=CPOL, cs_n=all 1, MOSI=0, FSM idle.
@@ -35,10 +40,11 @@ module spi_master
   import spi_pkg::*;
 #(
   parameter int DATA_WIDTH       = 8,
-  parameter int CLOCK_DIVIDER    = 4,
+  parameter int CLOCK_DIVIDER    = 6,
   parameter int SPI_MODE         = 0,
   parameter int NUM_SLAVES       = 1,
-  parameter int MISO_SYNC_STAGES = 2
+  parameter int MISO_SYNC_STAGES = 2,
+  parameter bit LSB_FIRST        = 1'b0
 )(
   input  logic                              clk,
   input  logic                              reset,
@@ -65,6 +71,11 @@ module spi_master
   if (SPI_MODE < 0 || SPI_MODE > 3) begin : g_chk_m $error("spi_master: SPI_MODE must be 0..3");     end
   if (NUM_SLAVES < 1)       begin : g_chk_s    $error("spi_master: NUM_SLAVES must be >= 1");       end
   if (MISO_SYNC_STAGES < 1) begin : g_chk_sync $error("spi_master: MISO_SYNC_STAGES must be >= 1"); end
+  if (CLOCK_DIVIDER < spi_min_divider(MISO_SYNC_STAGES))
+    begin : g_chk_div
+      $error("spi_master: CLOCK_DIVIDER must be >= %0d for MISO_SYNC_STAGES=%0d",
+             spi_min_divider(MISO_SYNC_STAGES), MISO_SYNC_STAGES);
+    end
 
   localparam logic CPHA = spi_cpha(SPI_MODE);
 
@@ -100,12 +111,12 @@ module spi_master
     .clk, .reset, .clear(accept), .inc(trail_edge), .count(bit_cnt), .last(bit_last)
   );
 
-  spi_tx_shift #(.DATA_WIDTH(DATA_WIDTH), .PRELOAD_MSB(CPHA == 1'b0)) u_tx (
+  spi_tx_shift #(.DATA_WIDTH(DATA_WIDTH), .PRELOAD_MSB(CPHA == 1'b0), .LSB_FIRST(LSB_FIRST)) u_tx (
     .clk, .reset, .clear(tx_clear), .load(accept), .shift(shift_evt),
     .load_data(tx_data), .serial_out(mosi)
   );
 
-  spi_rx_shift #(.DATA_WIDTH(DATA_WIDTH)) u_rx (
+  spi_rx_shift #(.DATA_WIDTH(DATA_WIDTH), .LSB_FIRST(LSB_FIRST)) u_rx (
     .clk, .reset, .shift(sample_evt), .serial_in(miso_s), .data(rx_shift_q)
   );
 
@@ -127,6 +138,8 @@ module spi_master
 
   // Rejected-start flag (rising edge of start only, so a held start does not
   // flood the flag while the core is busy)
+  //   error        = new start rejected for ANY reason (busy or invalid select)
+  //   select_error = new start rejected specifically because slave_select invalid
   always_ff @(posedge clk) begin
     if (reset) begin
       start_q      <= 1'b0;
@@ -135,7 +148,7 @@ module spi_master
     end else begin
       start_q      <= start;
       error        <= start && !start_q && (busy || !sel_valid);
-      select_error <= start && !start_q && (busy || !sel_valid);
+      select_error <= start && !start_q && !sel_valid;
     end
   end
 endmodule

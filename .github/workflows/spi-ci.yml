@@ -54,4 +54,4 @@ jobs:
 
       - name: Run Verilator Simulation
         run: |
-          python3 sim/run_sim.py sim || make -C sim sim-binary || true
+          python3 sim/run_sim.py sim

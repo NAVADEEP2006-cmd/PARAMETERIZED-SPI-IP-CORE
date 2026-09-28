@@ -2,7 +2,7 @@
 // spi_pkg.sv  -  Shared helpers for the Parameterized SPI IP Core
 //
 // Purpose : constant functions used for width calculation, SPI-mode decoding
-//           and closed-form performance (QoS) figures.
+//           and closed-form performance figures.
 // Note    : every function is a pure constant function (no state), so the
 //           package is fully synthesizable / elaboration-time only.
 //           Compile this file FIRST.
@@ -31,6 +31,19 @@ package spi_pkg;
   endfunction
 
   // ---------------------------------------------------------------------------
+  // Minimum legal CLOCK_DIVIDER for reliable MISO sampling.
+  // The synchronizer adds MISO_SYNC_STAGES cycles of latency; the slave (in
+  // loopback) adds ~3 cycles after the SCLK edge before MISO is valid.
+  // To ensure the sample edge sees stable data:
+  //   CLOCK_DIVIDER >= MISO_SYNC_STAGES + 3   (for loopback with internal slave)
+  //   CLOCK_DIVIDER >= MISO_SYNC_STAGES + 1   (for external slave, conservative)
+  // We enforce the tighter (loopback) constraint here.
+  // ---------------------------------------------------------------------------
+  function automatic int spi_min_divider(input int miso_sync_stages);
+    return miso_sync_stages + 3;
+  endfunction
+
+  // ---------------------------------------------------------------------------
   // Closed-form performance figures (derived, not measured).
   //   W = DATA_WIDTH, D = CLOCK_DIVIDER, clk_hz = system clock in Hz.
   //   SCLK period = 2*D system-clock cycles.
@@ -47,22 +60,29 @@ package spi_pkg;
   endfunction
 
   // Fixed per-transaction overhead in system-clock cycles:
-  //   D + 2  (CS setup/hold half-periods and FSM state cycles;
-  //           see docs/register_parameter_spec.md)
+  //   D + 2  (1 cycle S_SELECT + D cycles S_DESELECT + 1 cycle S_DONE)
   function automatic int unsigned spi_overhead_cycles(input int D);
     return D + 2;
   endfunction
 
-  // Busy time of one transaction = latency from accepted start to done pulse
-  function automatic int unsigned spi_busy_cycles(input int W, input int D);
+  // Total transaction latency from accepted start through done pulse (inclusive):
+  //   2*W*D + D + 2
+  function automatic int unsigned spi_latency_cycles(input int W, input int D);
     return spi_sclk_cycles(W, D) + spi_overhead_cycles(D);
   endfunction
 
+  // Active busy cycles of one transaction (cycles where busy == 1):
+  //   S_SELECT (1) + S_TRANSFER (2*W*D) + S_DESELECT (D) = 2*W*D + D + 1
+  //   (Note: busy is 0 during the S_DONE completion pulse)
+  function automatic int unsigned spi_busy_cycles(input int W, input int D);
+    return spi_sclk_cycles(W, D) + D + 1;
+  endfunction
+
   // Payload throughput in bit/s for back-to-back transactions
-  // (start held high: one extra IDLE cycle between transactions).
+  // (start held high: 1 idle/turnaround cycle between transactions).
   function automatic longint unsigned spi_payload_bps(input longint unsigned clk_hz,
                                                       input int W, input int D);
-    return (clk_hz * 64'(W)) / (64'(spi_busy_cycles(W, D)) + 64'd1);
+    return (clk_hz * 64'(W)) / (64'(spi_latency_cycles(W, D)) + 64'd1);
   endfunction
 
 endpackage
