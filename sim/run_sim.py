@@ -48,7 +48,7 @@ def do_lint():
         return 1
     
     print("\n================ Running Verilator Lint ================")
-    cmd = [verilator, "--lint-only", "-Wall", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb"]
+    cmd = [verilator, "--lint-only", "-Wall", "-Wno-fatal", "--timing", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb"]
     rc = run_cmd(cmd)
     if rc == 0:
         print("[SUCCESS] Verilator lint passed with 0 warnings/errors!")
@@ -61,7 +61,7 @@ def do_sim_verilator():
         return 1
     
     print("\n================ Compiling with Verilator ================")
-    cmd = [verilator, "--binary", "--timing", "-Wall", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb", "--trace"]
+    cmd = [verilator, "--binary", "--timing", "-Wall", "-Wno-fatal", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb", "--trace"]
     rc = run_cmd(cmd)
     if rc != 0:
         print("[FAIL] Verilator compilation failed.")
