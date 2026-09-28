@@ -50,7 +50,7 @@ module spi_pad_wrapper
   output logic                              error,
   output logic                              select_error,
   output logic                              transfer_active,
-
+ 
   // Performance / diagnostic counter monitoring
   input  logic                              perf_clear,
   output logic [31:0]                       perf_txn_count,
@@ -60,7 +60,7 @@ module spi_pad_wrapper
   output logic [31:0]                       perf_last_latency,
   output logic [31:0]                       perf_last_sclk_cycles,
   output logic [31:0]                       perf_reject_count,
-
+ 
   // Slave system-side interface (active only when LOOPBACK_MODE=1)
   input  logic                              clk_slave,
   input  logic                              reset_slave,
@@ -69,7 +69,7 @@ module spi_pad_wrapper
   output logic                              slave_rx_valid,
   output logic                              slave_busy,
   output logic                              slave_frame_error,
-
+ 
   // Physical Pad Pins (Chip / FPGA boundary)
   output logic                              pad_sclk,
   output logic                              pad_mosi,
@@ -155,9 +155,7 @@ module spi_pad_wrapper
       assign m_miso = s_miso_oe ? s_miso_o : 1'b1;
 
       // pad_miso tri-state: internal slave drives pad in loopback mode
-      /* verilator lint_off TRISTATE */
       assign pad_miso = s_miso_oe ? s_miso_o : 1'bz;
-      /* verilator lint_on TRISTATE */
 
     end else begin : gen_external
       // ------------------------------------------------------------------
@@ -169,9 +167,7 @@ module spi_pad_wrapper
 
       // pad_miso is NOT driven internally — it is owned by external device
       // No tri-state driver here; pad_miso is purely an input
-      /* verilator lint_off TRISTATE */
       assign pad_miso = 1'bz;   // high-Z: external device drives this
-      /* verilator lint_on TRISTATE */
 
       // Slave system-side ports tied to safe defaults
       assign slave_rx_data    = '0;
