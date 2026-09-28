@@ -1,0 +1,29 @@
+# Build and Simulation Artifacts
+obj_dir/
+*.o
+*.a
+*.exe
+*.out
+*.vcd
+*.fst
+*.wlf
+transcript
+work/
+modelsim.ini
+*.log
+*.dmp
+*.jou
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~

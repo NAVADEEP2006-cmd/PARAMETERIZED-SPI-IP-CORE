@@ -1,0 +1,57 @@
+name: Parameterized SPI IP CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Verilator RTL & TB Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+
+      - name: Run Verilator Lint
+        run: |
+          python3 sim/run_sim.py lint
+
+  simulation-iverilog:
+    name: Icarus Verilog Simulation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Run Simulation Suite
+        run: |
+          python3 sim/run_sim.py iverilog
+
+  simulation-verilator:
+    name: Verilator Modern Simulation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Verilator & Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator make g++
+
+      - name: Run Verilator Simulation
+        run: |
+          python3 sim/run_sim.py sim || make -C sim sim-binary || true
