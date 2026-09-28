@@ -419,13 +419,15 @@ module spi_tb;
     check_result("Perf Latency Formula", m0_lat == 32'd104,
                  $sformatf("latency: %0d (formula: 2*W*D+D+2 = 104)", m0_lat));
 
-    // Test perf_clear
+    // Test perf_clear. Drive before the active edge and sample after it.
+    @(negedge clk_m);
     m0_perf_clr = 1;
     @(posedge clk_m);
-    m0_perf_clr = 0;
-    @(posedge clk_m);
+    #1;
     check_result("Perf Clear", m0_txn_cnt == 0 && m0_bits_tot == 0,
                  "perf_clear reset counters to 0");
+    @(negedge clk_m);
+    m0_perf_clr = 0;
 
     // =========================================================================
     // TEST 7: Error Detection & select_error Semantics
@@ -457,13 +459,16 @@ module spi_tb;
     repeat (5) @(posedge clk_m);
     check_result("Busy Check", m0_busy == 1'b1, "Core is busy");
 
-    // Pulse start while busy with VALID slave select
+    // Pulse start while busy with VALID slave select.
+    @(negedge clk_m);
     m0_start = 1;
     @(posedge clk_m);
+    #1;
     check_result("Busy Reject: error", m0_error == 1'b1,
                  "error pulsed when start while busy");
     check_result("Busy Reject: NO select_error", m0_sel_err == 1'b0,
                  "select_error NOT pulsed (slave select is valid, rejection due to busy)");
+    @(negedge clk_m);
     m0_start = 0;
 
     while (!m0_done) @(posedge clk_m);
