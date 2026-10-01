@@ -50,7 +50,7 @@ module spi_pad_wrapper
   output logic                              error,
   output logic                              select_error,
   output logic                              transfer_active,
-
+ 
   // Performance / diagnostic counter monitoring
   input  logic                              perf_clear,
   output logic [31:0]                       perf_txn_count,
@@ -60,7 +60,7 @@ module spi_pad_wrapper
   output logic [31:0]                       perf_last_latency,
   output logic [31:0]                       perf_last_sclk_cycles,
   output logic [31:0]                       perf_reject_count,
-
+ 
   // Slave system-side interface (active only when LOOPBACK_MODE=1)
   input  logic                              clk_slave,
   input  logic                              reset_slave,
@@ -69,7 +69,7 @@ module spi_pad_wrapper
   output logic                              slave_rx_valid,
   output logic                              slave_busy,
   output logic                              slave_frame_error,
-
+ 
   // Physical Pad Pins (Chip / FPGA boundary)
   output logic                              pad_sclk,
   output logic                              pad_mosi,
