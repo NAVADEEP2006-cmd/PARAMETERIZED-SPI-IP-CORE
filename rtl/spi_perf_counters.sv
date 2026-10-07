@@ -69,6 +69,9 @@ module spi_perf_counters #(
       end
     end
   end else begin : g_off
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic _unused = &{1'b0, clk, reset, clear, busy, done, transfer_active, start_error};
+    /* verilator lint_on UNUSEDSIGNAL */
     assign txn_count = '0;   assign bits_total = '0;
     assign busy_cycles = '0; assign total_cycles = '0;
     assign last_latency = '0; assign last_sclk_cycles = '0;

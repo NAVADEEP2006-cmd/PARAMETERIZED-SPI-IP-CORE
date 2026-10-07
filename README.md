@@ -82,8 +82,8 @@ spi_ip/
 
 | Parameter | Default | Valid Range | Scope | Description |
 |---|---|---|---|---|
-| `DATA_WIDTH` | 8 | $\ge 1$ (8, 16, 32 verified) | Core | Number of bits per transaction. |
-| `CLOCK_DIVIDER` | 6 | $\ge \text{spi\_min\_divider}$ ($\ge 5$ for 2 sync stages) | Master | Half-period divider: $f_{sclk} = f_{clk} / (2D)$. |
+| `DATA_WIDTH` | 8 | $\ge 1$ (1, 8, 16, 32 verified) | Core | Number of bits per transaction. |
+| `CLOCK_DIVIDER` | 6 | $\ge \text{spi\_min\_divider}$ ($\ge 6$ for 2 sync stages) | Master | Half-period divider: $f_{sclk} = f_{clk} / (2D)$. Enforces synchronizer latency constraint. |
 | `SPI_MODE` | 0 | 0, 1, 2, 3 | Core | SPI mode $\{CPOL, CPHA\}$. |
 | `NUM_SLAVES` | 1 | $\ge 1$ (1, 2, 4 verified) | Master | Number of chip select lines on `cs_n`. |
 | `MISO_SYNC_STAGES` | 2 | $\ge 1$ | Master | Flop stages for synchronizing incoming MISO. |
@@ -112,22 +112,89 @@ $f_{sclk} = 4.167\text{ MHz}$, latency = $104\text{ cycles}$ ($2.08\ \mu\text{s}
 
 ## Verification Suite (`tb/spi_tb.sv`)
 
-The self-checking testbench validates the IP across 11 test suites:
-1. **SPI Mode 0:** Full-duplex loopback (`CPOL=0, CPHA=0`, 8-bit, MSB-first).
-2. **SPI Mode 1:** Full-duplex loopback (`CPOL=0, CPHA=1`, 8-bit, MSB-first).
-3. **SPI Mode 2:** Full-duplex loopback (`CPOL=1, CPHA=0`, 8-bit, MSB-first).
-4. **SPI Mode 3:** Full-duplex loopback (`CPOL=1, CPHA=1`, 8-bit, MSB-first).
-5. **Multi-Width Support:** Verified for 16-bit (`DATA_WIDTH=16`) and 32-bit (`DATA_WIDTH=32`) frames.
-6. **LSB-First Transfer:** Bit-reversal and transmission order verification (`LSB_FIRST=1`).
-7. **Performance Counters & Telemetry:** Verified measured latency ($104\text{ cycles}$), active SCLK cycles ($96\text{ cycles}$), and `perf_clear`.
-8. **Error Handling & Semantic Separation:** Verified rejection on invalid slave select, separate firing of `error` and `select_error`, and rejected start while busy.
-9. **Multi-Slave CS Verification:** Verified independent 1-hot decoding across 4 chip-select lines (`NUM_SLAVES=4`).
-10. **Reset During Transaction:** Verified immediate recovery to idle and deassertion of CS upon mid-transfer synchronous reset.
-11. **Back-to-Back Streaming:** Verified zero idle cycle penalty when `start` is held asserted continuously.
+The self-checking testbench validates the IP across **16 comprehensive verification suites** executing **74 automated assertions**:
+1. **Reset & Idle Pin Verification:** SCLK idle polarity (Modes 0–3), CS_N idle high, busy/done quiescent levels.
+2. **SPI Mode 0:** Full-duplex loopback (`CPOL=0, CPHA=0`, 8-bit, MSB-first).
+3. **SPI Mode 1:** Full-duplex loopback (`CPOL=0, CPHA=1`, 8-bit, MSB-first).
+4. **SPI Mode 2:** Full-duplex loopback (`CPOL=1, CPHA=0`, 8-bit, MSB-first).
+5. **SPI Mode 3:** Full-duplex loopback (`CPOL=1, CPHA=1`, 8-bit, MSB-first).
+6. **Performance Counters & Telemetry:** Verified measured latency ($104\text{ cycles}$), active SCLK cycles ($96\text{ cycles}$), and deterministic `perf_clear`.
+7. **Error Detection & Semantic Separation:** Verified rejection on invalid slave select, separate firing of `error` and `select_error`, and rejected start while busy.
+8. **Back-to-Back Consecutive Streaming Transfers:** Verified zero idle cycle penalty when `start` is held continuously asserted across multiple words.
+9. **16-Bit Word Transfer:** Verified parameterization for `DATA_WIDTH=16`.
+10. **32-Bit Word Transfer:** Verified parameterization for `DATA_WIDTH=32`.
+11. **LSB-First Transfer:** Verified bit-reversal and transmission order (`LSB_FIRST=1`).
+12. **Multi-Slave CS Verification:** Verified independent 1-hot decoding across 4 chip-select lines (`NUM_SLAVES=4`).
+13. **Reset During Active Transaction:** Verified immediate recovery to idle and deassertion of CS upon mid-transfer synchronous reset.
+14. **Single-Bit Transfer Boundary:** Verified corner case `DATA_WIDTH=1` for both `1'b1` and `1'b0`.
+15. **Clock Divider Minimum Boundary:** Verified exact timing boundary at `CLOCK_DIVIDER=5` (`MISO_SYNC_STAGES=1`).
+16. **Reset Lifecycle Verification:** Verified quiescent state during reset assertion before transfer, clean start recovery, and reset after transaction completion.
 
 ---
 
-## Quick Start (Simulation & Lint)
+## Tool Verification Status
+
+| Tool / Target | Version | Command | Status | Result / Details |
+|---|---|---|---|---|
+| **Verilator RTL Lint** | 5.032 | `python sim/run_sim.py lint` | **PASS** | 0 warnings, 0 errors under `-Wall` |
+| **Icarus Verilog Sim** | 12.0 | `python sim/run_sim.py iverilog` | **PASS** | 74 / 74 test assertions passed |
+| **Verilator Simulation** | 5.032 | `python sim/run_sim.py sim` | **PASS** | 74 / 74 test assertions passed |
+| **AMD Vivado XSim** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode sim` | **PASS** | 74 / 74 test assertions passed ($50.491\ \mu\text{s}$) |
+| **AMD Vivado Synthesis** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -part xc7a35tcsg324-1` | **PASS** | 39 LUTs, 326 FFs, 0 BRAM, 0 DSP, 0 Latches |
+| **AMD Vivado Implementation** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7a35tcsg324-1` | **PASS** | Routed cleanly: WNS = +15.272 ns, WHS = +0.170 ns |
+
+---
+
+## FPGA Implementation & Timing Results
+
+* **Primary Synthesis Top:** `spi_master_top` (Out-of-Context IP Core)
+* **Target FPGA Device:** AMD Artix-7 `xc7a35tcsg324-1` (Representative FPGA target for synthesis & implementation analysis)
+* **Physical Board Validation:** **Not performed** (RTL / IP-core verification project; no board hardware claims made)
+* **Core Clock Constraint:** 50.000 MHz ($T = 20.000\text{ ns}$, 50% duty cycle, defined in `constraints/spi_master_top.xdc`)
+
+### Resource Utilization (`xc7a35tcsg324-1`)
+
+| Resource | Used | Available | Utilization (%) | Notes |
+|---|---|---|---|---|
+| **Slice LUTs** | 39 | 20,800 | 0.19% | Fully logic LUTs (0 LUTRAM / SRL) |
+| **Slice Registers (FF)** | 326 | 41,600 | 0.78% | 325 FDRE, 1 FDSE |
+| **Registers as Latch** | 0 | 41,600 | **0.00%** | Zero latches inferred |
+| **Slices** | 84 | 8,150 | 1.03% | 43 SLICEL, 41 SLICEM |
+| **Block RAM (Tile)** | 0 | 50 | 0.00% | No BRAM utilized |
+| **DSP48E1** | 0 | 90 | 0.00% | No DSPs utilized |
+| **Bonded IOB** | 0 | 210 | 0.00% | Out-of-Context synthesis mode |
+| **Clock Buffers (BUFG)**| 0 | 32 | 0.00% | Out-of-Context core netlist |
+
+### Post-Routing Timing Closure Summary
+
+| Metric | Result | Target / Requirement | Status |
+|---|---|---|---|
+| **Worst Negative Slack (WNS)** | **+15.272 ns** | $\ge 0.000\text{ ns}$ | **MET** |
+| **Total Negative Slack (TNS)** | **0.000 ns** | $0.000\text{ ns}$ (0 / 641 failing endpoints) | **MET** |
+| **Worst Hold Slack (WHS)** | **+0.170 ns** | $\ge 0.000\text{ ns}$ | **MET** |
+| **Total Hold Slack (THS)** | **0.000 ns** | $0.000\text{ ns}$ (0 / 641 failing endpoints) | **MET** |
+| **Worst Pulse Width Slack (WPWS)** | **+9.500 ns** | $\ge 0.000\text{ ns}$ | **MET** |
+| **Critical Path Delay** | 3.918 ns (Logic: 0.744 ns, Route: 3.174 ns) | Max Period: 20.000 ns | **MET** |
+| **Design Rule Check (DRC)** | 0 Errors, 0 Critical Warnings, 1 Advisory Warning (CFGBVS-1) | Clean | **PASS** |
+
+*All reports archived in `reports/vivado/`.*
+
+---
+
+## Quick Start (Vivado, Simulation & Lint)
+
+### AMD Vivado Automation Flow
+Run the reproducible batch Tcl flow from the project root:
+```bash
+# 1. Non-device-specific RTL Elaboration & AST Analysis
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate -top spi_master_top
+
+# 2. Complete Synthesis & Implementation Flow (Artix-7 xc7a35tcsg324-1)
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_master_top -part xc7a35tcsg324-1
+
+# 3. AMD Vivado XSim Functional Simulation
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode sim
+```
 
 ### Verilator Lint
 ```bash
@@ -155,3 +222,4 @@ Waveforms are dumped to `sim/spi_tb.vcd` and can be viewed using GTKWave:
 ```bash
 gtkwave sim/spi_tb.vcd
 ```
+

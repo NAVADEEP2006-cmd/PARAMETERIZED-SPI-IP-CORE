@@ -32,8 +32,10 @@ all: lint
 
 # Lint RTL and TB using Verilator
 lint:
-	@echo "--- Running Verilator Lint ---"
-	$(VERILATOR) --lint-only --timing -Wall -Wno-fatal -Wno-TIMESCALEMOD -Wno-UNUSEDSIGNAL -Wno-BLKSEQ -sv $(RTL_SRCS) $(TB_SRCS) --top-module spi_tb
+	@echo "--- Running Verilator RTL Lint ---"
+	$(VERILATOR) --lint-only -Wall -sv $(RTL_SRCS) --top-module spi_pad_wrapper
+	@echo "--- Running Verilator Full Lint ---"
+	$(VERILATOR) --lint-only --timing -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $(RTL_SRCS) $(TB_SRCS) --top-module spi_tb
 	@echo "--- Verilator Lint Passed with 0 errors! ---"
 
 # Simulation using modern Verilator (v5+ with --timing and --binary)
@@ -41,7 +43,7 @@ sim: sim-binary
 
 sim-binary:
 	@echo "--- Compiling and Running with Verilator (--binary --timing) ---"
-	$(VERILATOR) --binary --timing -Wall -Wno-fatal -Wno-TIMESCALEMOD -Wno-UNUSEDSIGNAL -Wno-BLKSEQ -sv $(RTL_SRCS) $(TB_SRCS) --top-module spi_tb --trace
+	$(VERILATOR) --binary --timing -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $(RTL_SRCS) $(TB_SRCS) --top-module spi_tb --trace
 	./obj_dir/Vspi_tb
 
 # Simulation fallback using Icarus Verilog

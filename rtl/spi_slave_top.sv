@@ -34,6 +34,5 @@ module spi_slave_top #(
     .tx_data, .rx_data, .rx_valid, .busy, .frame_error
   );
 
-  // Tri-state MISO output for pad-connected interface.
   assign miso = miso_oe ? miso_o : 1'bz;
 endmodule

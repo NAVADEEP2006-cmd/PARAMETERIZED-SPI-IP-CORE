@@ -8,8 +8,8 @@ The SPI IP Core is configured through SystemVerilog parameters and controlled di
 
 | Parameter | Default | Valid Range | Scope | Description |
 |---|---|---|---|---|
-| `DATA_WIDTH` (W) | 8 | $\ge 1$ (8, 16, 32 verified) | Master & Slave | Width of the transfer word in bits; sizes shift registers, data buses, and bit counter. |
-| `CLOCK_DIVIDER` (D) | 6 | $\ge \text{spi\_min\_divider}$ ($\ge 5$ for 2 sync stages) | Master & Top | Half-period divider: $f_{sclk} = f_{clk} / (2D)$. Must satisfy synchronizer timing constraint. |
+| `DATA_WIDTH` (W) | 8 | $\ge 1$ (1, 8, 16, 32 verified) | Master & Slave | Width of the transfer word in bits; sizes shift registers, data buses, and bit counter. |
+| `CLOCK_DIVIDER` (D) | 6 | $\ge \text{spi\_min\_divider}$ ($\ge 6$ for 2 sync stages) | Master & Top | Half-period divider: $f_{sclk} = f_{clk} / (2D)$. Enforces loopback round-trip synchronizer latency. |
 | `SPI_MODE` | 0 | 0, 1, 2, 3 | Master & Slave | SPI mode configuration: `Mode = {CPOL, CPHA}`. Controls clock polarity and phase. |
 | `NUM_SLAVES` | 1 | $\ge 1$ (1, 2, 4 verified) | Master & Top | Number of independent chip-select lines on the `cs_n` bus. |
 | `MISO_SYNC_STAGES` | 2 | $\ge 1$ | Master | Number of flip-flop synchronizer stages on the incoming `miso` line. |
@@ -66,3 +66,20 @@ The core provides comprehensive non-intrusive diagnostic counters. These are tel
 | `perf_last_latency`| 32-bit uint | Latency of the most recent transaction ($2WD + D + 2$) | Verified (104 cycles for W=8, D=6) |
 | `perf_last_sclk_cycles`| 32-bit uint | SCLK active toggling duration of last transaction ($2WD$) | Verified (96 cycles for W=8, D=6) |
 | `perf_reject_count`| 32-bit uint | Count of rejected start attempts (`error` pulses) | Verified |
+
+---
+
+## 4. Hardware Synthesis & Resource Cost Profile
+
+Synthesis and implementation verified on representative FPGA target **AMD Artix-7 `xc7a35tcsg324-1`** using AMD Vivado v2026.1 in out-of-context mode:
+
+| Resource | Count | Device Capacity | Utilization | Notes |
+|---|---|---|---|---|
+| **Slice LUTs** | 39 | 20,800 | 0.19% | Pure logic LUTs (0 distributed RAM / SRL) |
+| **Slice Registers** | 326 | 41,600 | 0.78% | 325 FDRE, 1 FDSE; **0 Latches** |
+| **Slices** | 84 | 8,150 | 1.03% | 43 SLICEL, 41 SLICEM |
+| **BRAM Tiles** | 0 | 50 | 0.00% | No block memory consumed |
+| **DSP48E1** | 0 | 90 | 0.00% | No DSP blocks consumed |
+
+*Note: The core clock constraint is 50.000 MHz (20.000 ns period). Physical board validation was not performed (RTL/IP-core verification project).*
+
