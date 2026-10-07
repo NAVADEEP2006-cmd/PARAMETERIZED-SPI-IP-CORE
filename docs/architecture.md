@@ -106,6 +106,6 @@ capture     | 0    │   0      │   0        │   tick     │   0      │ 0
 
 The SPI slave samples external SPI pins using its local clock (`clk`):
 - **Oversampling Requirement:** $f_{clk\_slave} \ge 4 \times f_{sclk}$. The half-period of SCLK must be at least 2 slave clock cycles for reliable edge detection.
-- **Master-Slave Loopback Timing:** Edge detection introduces $\text{SYNC\_STAGES} + 1$ clock cycles of latency. The master must configure `CLOCK_DIVIDER` such that:
-  $$\text{CLOCK\_DIVIDER} \ge \text{spi\_min\_divider}(\text{MISO\_SYNC\_STAGES}) \quad (\ge 5 \text{ for 2-stage sync})$$
-  Default `CLOCK_DIVIDER = 6` guarantees margin across all 4 SPI modes.
+- **Master-Slave Loopback Timing:** In loopback mode with an internal synchronous slave, round-trip latency through slave input synchronizers (2 cycles), edge detection (1 cycle), slave output register (1 cycle), and master MISO synchronizer (`MISO_SYNC_STAGES` cycles) requires:
+  $$\text{CLOCK\_DIVIDER} \ge \text{spi\_min\_divider}(\text{MISO\_SYNC\_STAGES}) = \text{MISO\_SYNC\_STAGES} + 4 \quad (\ge 6 \text{ for 2-stage sync})$$
+  Default `CLOCK_DIVIDER = 6` guarantees margin across all 4 SPI modes. For external asynchronous peripherals, `CLOCK_DIVIDER >= MISO_SYNC_STAGES + 1` applies.

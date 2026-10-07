@@ -32,15 +32,16 @@ package spi_pkg;
 
   // ---------------------------------------------------------------------------
   // Minimum legal CLOCK_DIVIDER for reliable MISO sampling.
-  // The synchronizer adds MISO_SYNC_STAGES cycles of latency; the slave (in
-  // loopback) adds ~3 cycles after the SCLK edge before MISO is valid.
-  // To ensure the sample edge sees stable data:
-  //   CLOCK_DIVIDER >= MISO_SYNC_STAGES + 3   (for loopback with internal slave)
-  //   CLOCK_DIVIDER >= MISO_SYNC_STAGES + 1   (for external slave, conservative)
-  // We enforce the tighter (loopback) constraint here.
+  // In loopback mode with an internal synchronous slave:
+  //   - Slave input synchronizer: SLAVE_SYNC_STAGES = 2 cycles
+  //   - Slave edge detection: 1 cycle
+  //   - Slave MISO output register: 1 cycle
+  //   - Master MISO input synchronizer: MISO_SYNC_STAGES cycles
+  // Total round-trip latency = 2 + 1 + 1 + MISO_SYNC_STAGES = MISO_SYNC_STAGES + 4.
+  // For MISO_SYNC_STAGES = 2, CLOCK_DIVIDER must be >= 6.
   // ---------------------------------------------------------------------------
   function automatic int spi_min_divider(input int miso_sync_stages);
-    return miso_sync_stages + 3;
+    return miso_sync_stages + 4;
   endfunction
 
   // ---------------------------------------------------------------------------

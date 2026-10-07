@@ -155,9 +155,7 @@ module spi_pad_wrapper
       assign m_miso = s_miso_oe ? s_miso_o : 1'b1;
 
       // pad_miso tri-state: internal slave drives pad in loopback mode
-      /* verilator lint_off TRISTATE */
       assign pad_miso = s_miso_oe ? s_miso_o : 1'bz;
-      /* verilator lint_on TRISTATE */
 
     end else begin : gen_external
       // ------------------------------------------------------------------
@@ -169,9 +167,7 @@ module spi_pad_wrapper
 
       // pad_miso is NOT driven internally — it is owned by external device
       // No tri-state driver here; pad_miso is purely an input
-      /* verilator lint_off TRISTATE */
       assign pad_miso = 1'bz;   // high-Z: external device drives this
-      /* verilator lint_on TRISTATE */
 
       // Slave system-side ports tied to safe defaults
       assign slave_rx_data    = '0;

@@ -30,12 +30,14 @@ $TbSources = @(
 
 switch ($Action.ToLower()) {
     "lint" {
-        Write-Host "--- Running Verilator Lint ---" -ForegroundColor Cyan
-        & verilator --lint-only -Wall -sv $RtlSources $TbSources --top-module spi_tb
+        Write-Host "--- Running Verilator RTL Lint ---" -ForegroundColor Cyan
+        & verilator --lint-only -Wall -sv $RtlSources --top-module spi_pad_wrapper
+        Write-Host "--- Running Verilator Full Lint ---" -ForegroundColor Cyan
+        & verilator --lint-only --timing -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $RtlSources $TbSources --top-module spi_tb
     }
     "sim" {
         Write-Host "--- Compiling and Running with Verilator ---" -ForegroundColor Cyan
-        & verilator --binary --timing -Wall -sv $RtlSources $TbSources --top-module spi_tb --trace
+        & verilator --binary --timing -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $RtlSources $TbSources --top-module spi_tb --trace
         if ($LASTEXITCODE -eq 0) {
             & (Join-Path $ScriptDir "obj_dir\Vspi_tb.exe")
         }

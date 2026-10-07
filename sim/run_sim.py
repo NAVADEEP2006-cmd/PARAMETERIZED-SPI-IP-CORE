@@ -47,12 +47,19 @@ def do_lint():
         print("[ERROR] 'verilator' not found in PATH.")
         return 1
     
-    print("\n================ Running Verilator Lint ================")
-    cmd = [verilator, "--lint-only", "-Wall", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb"]
-    rc = run_cmd(cmd)
-    if rc == 0:
+    print("\n================ Running Verilator RTL Lint ================")
+    cmd_rtl = [verilator, "--lint-only", "-Wall", "-sv"] + RTL_FILES + ["--top-module", "spi_pad_wrapper"]
+    rc_rtl = run_cmd(cmd_rtl)
+    if rc_rtl != 0:
+        print("[FAIL] Verilator RTL lint failed.")
+        return rc_rtl
+    
+    print("\n================ Running Verilator Full Lint ================")
+    cmd_tb = [verilator, "--lint-only", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb"]
+    rc_tb = run_cmd(cmd_tb)
+    if rc_tb == 0:
         print("[SUCCESS] Verilator lint passed with 0 warnings/errors!")
-    return rc
+    return rc_tb
 
 def do_sim_verilator():
     verilator = shutil.which("verilator")
@@ -61,7 +68,7 @@ def do_sim_verilator():
         return 1
     
     print("\n================ Compiling with Verilator ================")
-    cmd = [verilator, "--binary", "--timing", "-Wall", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb", "--trace"]
+    cmd = [verilator, "--binary", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb", "--trace"]
     rc = run_cmd(cmd)
     if rc != 0:
         print("[FAIL] Verilator compilation failed.")

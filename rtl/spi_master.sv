@@ -84,7 +84,6 @@ module spi_master
   logic run, sclk_en, cs_active, capture, tx_clear;
   logic sel_valid, start_req, bit_last;
   logic sample_evt, shift_evt, miso_s;
-  logic [spi_idx_w(DATA_WIDTH)-1:0] bit_cnt;
   logic [DATA_WIDTH-1:0]            rx_shift_q, rx_data_r;
   logic start_q;
   logic [MISO_SYNC_STAGES-1:0] miso_sr;
@@ -106,9 +105,13 @@ module spi_master
     .clk, .reset, .run, .sclk_en, .tick, .lead_edge, .trail_edge, .sclk
   );
 
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic [spi_idx_w(DATA_WIDTH)-1:0] bit_cnt_unused;
+  /* verilator lint_on UNUSEDSIGNAL */
+
   // one bit period completes on every trailing edge
   spi_bit_counter #(.DATA_WIDTH(DATA_WIDTH)) u_bitcnt (
-    .clk, .reset, .clear(accept), .inc(trail_edge), .count(bit_cnt), .last(bit_last)
+    .clk, .reset, .clear(accept), .inc(trail_edge), .count(bit_cnt_unused), .last(bit_last)
   );
 
   spi_tx_shift #(.DATA_WIDTH(DATA_WIDTH), .PRELOAD_MSB(CPHA == 1'b0), .LSB_FIRST(LSB_FIRST)) u_tx (
