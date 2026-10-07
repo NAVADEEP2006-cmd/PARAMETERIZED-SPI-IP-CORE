@@ -66,3 +66,20 @@ The core provides comprehensive non-intrusive diagnostic counters. These are tel
 | `perf_last_latency`| 32-bit uint | Latency of the most recent transaction ($2WD + D + 2$) | Verified (104 cycles for W=8, D=6) |
 | `perf_last_sclk_cycles`| 32-bit uint | SCLK active toggling duration of last transaction ($2WD$) | Verified (96 cycles for W=8, D=6) |
 | `perf_reject_count`| 32-bit uint | Count of rejected start attempts (`error` pulses) | Verified |
+
+---
+
+## 4. Hardware Synthesis & Resource Cost Profile
+
+Synthesis and implementation verified on representative FPGA target **AMD Artix-7 `xc7a35tcsg324-1`** using AMD Vivado v2026.1 in out-of-context mode:
+
+| Resource | Count | Device Capacity | Utilization | Notes |
+|---|---|---|---|---|
+| **Slice LUTs** | 39 | 20,800 | 0.19% | Pure logic LUTs (0 distributed RAM / SRL) |
+| **Slice Registers** | 326 | 41,600 | 0.78% | 325 FDRE, 1 FDSE; **0 Latches** |
+| **Slices** | 84 | 8,150 | 1.03% | 43 SLICEL, 41 SLICEM |
+| **BRAM Tiles** | 0 | 50 | 0.00% | No block memory consumed |
+| **DSP48E1** | 0 | 90 | 0.00% | No DSP blocks consumed |
+
+*Note: The core clock constraint is 50.000 MHz (20.000 ns period). Physical board validation was not performed (RTL/IP-core verification project).*
+

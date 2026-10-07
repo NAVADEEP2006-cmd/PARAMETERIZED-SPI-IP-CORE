@@ -109,3 +109,19 @@ The SPI slave samples external SPI pins using its local clock (`clk`):
 - **Master-Slave Loopback Timing:** In loopback mode with an internal synchronous slave, round-trip latency through slave input synchronizers (2 cycles), edge detection (1 cycle), slave output register (1 cycle), and master MISO synchronizer (`MISO_SYNC_STAGES` cycles) requires:
   $$\text{CLOCK\_DIVIDER} \ge \text{spi\_min\_divider}(\text{MISO\_SYNC\_STAGES}) = \text{MISO\_SYNC\_STAGES} + 4 \quad (\ge 6 \text{ for 2-stage sync})$$
   Default `CLOCK_DIVIDER = 6` guarantees margin across all 4 SPI modes. For external asynchronous peripherals, `CLOCK_DIVIDER >= MISO_SYNC_STAGES + 1` applies.
+
+---
+
+## 6. FPGA Implementation & Synthesis Target
+
+- **Primary Synthesis Target:** `spi_master_top` (technology-independent out-of-context IP core).
+- **Representative FPGA Target:** AMD Artix-7 `xc7a35tcsg324-1` (speed grade -1).
+- **Physical Board Validation:** **Not performed** (this is an RTL / IP-core design and verification project).
+- **Core Clock Target:** 50.000 MHz ($T = 20.000\text{ ns}$, 50% duty cycle, defined in `constraints/spi_master_top.xdc`).
+- **Synthesis & Implementation Metrics (Vivado v2026.1):**
+  - **Logic Utilization:** 39 Slice LUTs (0.19%), 326 Slice Registers (0.78%), 84 Slices (1.03%).
+  - **Memory & Arithmetic:** 0 BRAM, 0 DSP.
+  - **Inferred Latches:** 0 (100% synchronous design).
+  - **Timing Closure:** Setup Slack $\text{WNS} = +15.272\text{ ns}$, Hold Slack $\text{WHS} = +0.170\text{ ns}$, $\text{TNS} = 0.000\text{ ns}$, $\text{THS} = 0.000\text{ ns}$ (MET).
+  - **Critical Path:** State register `u_master/u_fsm/FSM_sequential_state_reg[2]` to diagnostic counter `u_perf/g_perf.lat_cnt_reg[28]/R` (3.918 ns delay).
+

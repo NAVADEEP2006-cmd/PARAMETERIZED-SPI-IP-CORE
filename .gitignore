@@ -1,5 +1,8 @@
 # Build and Simulation Artifacts
 obj_dir/
+sim/xsim_build/
+.Xil/
+xsim.dir/
 *.o
 *.a
 *.exe
@@ -13,6 +16,11 @@ modelsim.ini
 *.log
 *.dmp
 *.jou
+*.pb
+*.str
+*.dcp
+*.wdb
+clockInfo.txt
 
 # Python
 __pycache__/

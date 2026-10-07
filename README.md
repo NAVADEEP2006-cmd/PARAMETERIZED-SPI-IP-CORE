@@ -139,11 +139,62 @@ The self-checking testbench validates the IP across **16 comprehensive verificat
 | **Verilator RTL Lint** | 5.032 | `python sim/run_sim.py lint` | **PASS** | 0 warnings, 0 errors under `-Wall` |
 | **Icarus Verilog Sim** | 12.0 | `python sim/run_sim.py iverilog` | **PASS** | 74 / 74 test assertions passed |
 | **Verilator Simulation** | 5.032 | `python sim/run_sim.py sim` | **PASS** | 74 / 74 test assertions passed |
-| **AMD Vivado Synthesis** | — | — | **NOT VERIFIED** | Vivado unavailable/inaccessible in this environment |
+| **AMD Vivado XSim** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode sim` | **PASS** | 74 / 74 test assertions passed ($50.491\ \mu\text{s}$) |
+| **AMD Vivado Synthesis** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -part xc7a35tcsg324-1` | **PASS** | 39 LUTs, 326 FFs, 0 BRAM, 0 DSP, 0 Latches |
+| **AMD Vivado Implementation** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7a35tcsg324-1` | **PASS** | Routed cleanly: WNS = +15.272 ns, WHS = +0.170 ns |
 
 ---
 
-## Quick Start (Simulation & Lint)
+## FPGA Implementation & Timing Results
+
+* **Primary Synthesis Top:** `spi_master_top` (Out-of-Context IP Core)
+* **Target FPGA Device:** AMD Artix-7 `xc7a35tcsg324-1` (Representative FPGA target for synthesis & implementation analysis)
+* **Physical Board Validation:** **Not performed** (RTL / IP-core verification project; no board hardware claims made)
+* **Core Clock Constraint:** 50.000 MHz ($T = 20.000\text{ ns}$, 50% duty cycle, defined in `constraints/spi_master_top.xdc`)
+
+### Resource Utilization (`xc7a35tcsg324-1`)
+
+| Resource | Used | Available | Utilization (%) | Notes |
+|---|---|---|---|---|
+| **Slice LUTs** | 39 | 20,800 | 0.19% | Fully logic LUTs (0 LUTRAM / SRL) |
+| **Slice Registers (FF)** | 326 | 41,600 | 0.78% | 325 FDRE, 1 FDSE |
+| **Registers as Latch** | 0 | 41,600 | **0.00%** | Zero latches inferred |
+| **Slices** | 84 | 8,150 | 1.03% | 43 SLICEL, 41 SLICEM |
+| **Block RAM (Tile)** | 0 | 50 | 0.00% | No BRAM utilized |
+| **DSP48E1** | 0 | 90 | 0.00% | No DSPs utilized |
+| **Bonded IOB** | 0 | 210 | 0.00% | Out-of-Context synthesis mode |
+| **Clock Buffers (BUFG)**| 0 | 32 | 0.00% | Out-of-Context core netlist |
+
+### Post-Routing Timing Closure Summary
+
+| Metric | Result | Target / Requirement | Status |
+|---|---|---|---|
+| **Worst Negative Slack (WNS)** | **+15.272 ns** | $\ge 0.000\text{ ns}$ | **MET** |
+| **Total Negative Slack (TNS)** | **0.000 ns** | $0.000\text{ ns}$ (0 / 641 failing endpoints) | **MET** |
+| **Worst Hold Slack (WHS)** | **+0.170 ns** | $\ge 0.000\text{ ns}$ | **MET** |
+| **Total Hold Slack (THS)** | **0.000 ns** | $0.000\text{ ns}$ (0 / 641 failing endpoints) | **MET** |
+| **Worst Pulse Width Slack (WPWS)** | **+9.500 ns** | $\ge 0.000\text{ ns}$ | **MET** |
+| **Critical Path Delay** | 3.918 ns (Logic: 0.744 ns, Route: 3.174 ns) | Max Period: 20.000 ns | **MET** |
+| **Design Rule Check (DRC)** | 0 Errors, 0 Critical Warnings, 1 Advisory Warning (CFGBVS-1) | Clean | **PASS** |
+
+*All reports archived in `reports/vivado/`.*
+
+---
+
+## Quick Start (Vivado, Simulation & Lint)
+
+### AMD Vivado Automation Flow
+Run the reproducible batch Tcl flow from the project root:
+```bash
+# 1. Non-device-specific RTL Elaboration & AST Analysis
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate -top spi_master_top
+
+# 2. Complete Synthesis & Implementation Flow (Artix-7 xc7a35tcsg324-1)
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_master_top -part xc7a35tcsg324-1
+
+# 3. AMD Vivado XSim Functional Simulation
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode sim
+```
 
 ### Verilator Lint
 ```bash
@@ -171,3 +222,4 @@ Waveforms are dumped to `sim/spi_tb.vcd` and can be viewed using GTKWave:
 ```bash
 gtkwave sim/spi_tb.vcd
 ```
+

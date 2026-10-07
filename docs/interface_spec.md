@@ -74,3 +74,18 @@ All counters are 32-bit, free-running, wrap on overflow, and clear synchronously
 ## 5. Integration Wrapper Modes (`spi_pad_wrapper.sv`)
 - **`LOOPBACK_MODE = 1`:** Internal loopback between master and slave 0. Master `cs_n[0]` drives internal slave `cs_n`. Master `cs_n[1..NUM_SLAVES-1]` drive external pads for peripheral expansion. `pad_miso` is driven by slave 0 tri-state buffer.
 - **`LOOPBACK_MODE = 0`:** Pure external pad mode. Master connects directly to chip pins (`pad_sclk`, `pad_mosi`, `pad_cs_n`). Internal slave is **not instantiated** and `pad_miso` is **tri-stated to high-Z** (`1'bz`) to eliminate any contention with external SPI peripherals.
+
+---
+
+## 6. Timing & Constraint Specification
+
+- **Constraint File:** `constraints/spi_master_top.xdc`
+- **Primary Core Clock:**
+  ```xdc
+  create_clock -period 20.000 -name clk -waveform {0.000 10.000} [get_ports clk]
+  ```
+- **Clock Frequency Target:** 50.000 MHz ($T = 20.000\text{ ns}$, 50% duty cycle).
+- **Scope:** Defines the IP-level synchronous clock budget. Board-specific physical pin mappings and I/O standards are to be defined when integrating into a physical board.
+- **Representative FPGA Synthesis Target:** AMD Artix-7 `xc7a35tcsg324-1` (Out-of-Context).
+- **Physical Board Validation:** **Not performed** (RTL / IP-core verification project).
+
