@@ -1,6 +1,18 @@
 # Parameterized Synthesizable SystemVerilog SPI IP Core
 
-A modular, parameterized, and fully synthesizable **SystemVerilog SPI IP Core** engineered for academic VLSI projects, FPGA/ASIC integration, and portfolio demonstration.
+A modular, parameterized, and fully synthesizable **SystemVerilog SPI IP Core** designed as reusable RTL for digital VLSI, FPGA characterization, and SoC-style integration. The design supports full-duplex SPI communication, configurable timing and data widths, multi-slave selection, loopback verification, and automated simulation/lint flows.
+
+---
+
+## Engineering Highlights
+
+| Verification | Protocol | Parameterization | FPGA Characterization |
+|---|---|---|---|
+| **16 suites / 74 assertions** | **SPI Modes 0-3** | **8 / 16 / 32-bit verified** | **Artix-7 xc7a35tcsg324-1** |
+| Icarus + Verilator + XSim | Full duplex | Multi-slave 1 / 2 / 4 | **39 LUTs / 326 FFs** |
+| Verilator lint: **0 warnings / 0 errors** | Registered CS timing | MSB / LSB first | **WNS +15.272 ns @ 50 MHz** |
+
+> **Board validation note:** Physical FPGA board testing was not performed. The reported FPGA results are representative synthesis and implementation results for the specified Artix-7 device.
 
 ---
 
@@ -37,7 +49,7 @@ A modular, parameterized, and fully synthesizable **SystemVerilog SPI IP Core** 
 ## Directory Structure
 
 ```text
-spi_ip/
+.
 ├── rtl/
 │   ├── spi_pkg.sv             # Mode decode, width helpers, and closed-form performance functions
 │   ├── spi_clock_gen.sv       # SCLK generator and half-period tick strobes
@@ -55,7 +67,7 @@ spi_ip/
 │   └── spi_pad_wrapper.sv     # SoC integration wrapper (loopback / external pad modes)
 │
 ├── tb/
-│   └── spi_tb.sv              # Comprehensive self-checking verification testbench (11 test suites)
+│   └── spi_tb.sv              # Comprehensive self-checking verification testbench (16 suites / 74 assertions)
 │
 ├── sim/
 │   ├── Makefile               # Simulation and lint automation
