@@ -9,23 +9,23 @@ $RtlDir = Join-Path $ProjectRoot "rtl"
 $TbDir = Join-Path $ProjectRoot "tb"
 
 $RtlSources = @(
-    (Join-Path $RtlDir "spi_pkg.sv"),
-    (Join-Path $RtlDir "spi_clock_gen.sv"),
-    (Join-Path $RtlDir "spi_bit_counter.sv"),
-    (Join-Path $RtlDir "spi_tx_shift.sv"),
-    (Join-Path $RtlDir "spi_rx_shift.sv"),
-    (Join-Path $RtlDir "spi_cs_ctrl.sv"),
-    (Join-Path $RtlDir "spi_master_fsm.sv"),
-    (Join-Path $RtlDir "spi_perf_counters.sv"),
-    (Join-Path $RtlDir "spi_master.sv"),
-    (Join-Path $RtlDir "spi_master_top.sv"),
-    (Join-Path $RtlDir "spi_top.sv"),
-    (Join-Path $RtlDir "spi_slave.sv"),
-    (Join-Path $RtlDir "spi_slave_top.sv"),
-    (Join-Path $RtlDir "spi_pad_wrapper.sv")
+    (Join-Path $RtlDir "common\spi_pkg.sv"),
+    (Join-Path $RtlDir "master\spi_clock_gen.sv"),
+    (Join-Path $RtlDir "master\spi_bit_counter.sv"),
+    (Join-Path $RtlDir "master\spi_tx_shift.sv"),
+    (Join-Path $RtlDir "master\spi_rx_shift.sv"),
+    (Join-Path $RtlDir "master\spi_cs_ctrl.sv"),
+    (Join-Path $RtlDir "master\spi_master_fsm.sv"),
+    (Join-Path $RtlDir "master\spi_perf_counters.sv"),
+    (Join-Path $RtlDir "master\spi_master.sv"),
+    (Join-Path $RtlDir "master\spi_master_top.sv"),
+    (Join-Path $RtlDir "master\spi_top.sv"),
+    (Join-Path $RtlDir "slave\spi_slave.sv"),
+    (Join-Path $RtlDir "slave\spi_slave_top.sv"),
+    (Join-Path $RtlDir "common\spi_pad_wrapper.sv")
 )
 $TbSources = @(
-    (Join-Path $TbDir "spi_tb.sv")
+    (Join-Path $TbDir "integration\spi_tb.sv")
 )
 
 switch ($Action.ToLower()) {

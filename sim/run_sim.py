@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 run_sim.py - Cross-Platform Automation Script for Parameterized SPI IP Core
-Supports Verilator (lint & sim) and Icarus Verilog.
+Supports Verilator (lint & sim), Icarus Verilog, and modular unit tests.
 """
 
 import os
@@ -16,24 +16,32 @@ RTL_DIR = os.path.join(PROJECT_ROOT, "rtl")
 TB_DIR = os.path.join(PROJECT_ROOT, "tb")
 
 RTL_FILES = [
-    os.path.join(RTL_DIR, "spi_pkg.sv"),
-    os.path.join(RTL_DIR, "spi_clock_gen.sv"),
-    os.path.join(RTL_DIR, "spi_bit_counter.sv"),
-    os.path.join(RTL_DIR, "spi_tx_shift.sv"),
-    os.path.join(RTL_DIR, "spi_rx_shift.sv"),
-    os.path.join(RTL_DIR, "spi_cs_ctrl.sv"),
-    os.path.join(RTL_DIR, "spi_master_fsm.sv"),
-    os.path.join(RTL_DIR, "spi_perf_counters.sv"),
-    os.path.join(RTL_DIR, "spi_master.sv"),
-    os.path.join(RTL_DIR, "spi_master_top.sv"),
-    os.path.join(RTL_DIR, "spi_top.sv"),
-    os.path.join(RTL_DIR, "spi_slave.sv"),
-    os.path.join(RTL_DIR, "spi_slave_top.sv"),
-    os.path.join(RTL_DIR, "spi_pad_wrapper.sv")
+    os.path.join(RTL_DIR, "common", "spi_pkg.sv"),
+    os.path.join(RTL_DIR, "master", "spi_clock_gen.sv"),
+    os.path.join(RTL_DIR, "master", "spi_bit_counter.sv"),
+    os.path.join(RTL_DIR, "master", "spi_tx_shift.sv"),
+    os.path.join(RTL_DIR, "master", "spi_rx_shift.sv"),
+    os.path.join(RTL_DIR, "master", "spi_cs_ctrl.sv"),
+    os.path.join(RTL_DIR, "master", "spi_master_fsm.sv"),
+    os.path.join(RTL_DIR, "master", "spi_perf_counters.sv"),
+    os.path.join(RTL_DIR, "master", "spi_master.sv"),
+    os.path.join(RTL_DIR, "master", "spi_master_top.sv"),
+    os.path.join(RTL_DIR, "master", "spi_top.sv"),
+    os.path.join(RTL_DIR, "slave", "spi_slave.sv"),
+    os.path.join(RTL_DIR, "slave", "spi_slave_top.sv"),
+    os.path.join(RTL_DIR, "common", "spi_pad_wrapper.sv")
 ]
 
-TB_FILES = [
-    os.path.join(TB_DIR, "spi_tb.sv")
+TB_INTEGRATION_FILES = [
+    os.path.join(TB_DIR, "integration", "spi_tb.sv")
+]
+
+UNIT_TESTS = [
+    os.path.join(TB_DIR, "unit", "tb_spi_clock_gen.sv"),
+    os.path.join(TB_DIR, "unit", "tb_spi_bit_counter.sv"),
+    os.path.join(TB_DIR, "unit", "tb_spi_cs_ctrl.sv"),
+    os.path.join(TB_DIR, "unit", "tb_spi_shift_regs.sv"),
+    os.path.join(TB_DIR, "unit", "tb_spi_master_fsm.sv")
 ]
 
 def run_cmd(cmd, cwd=SIM_DIR):
@@ -55,7 +63,7 @@ def do_lint():
         return rc_rtl
     
     print("\n================ Running Verilator Full Lint ================")
-    cmd_tb = [verilator, "--lint-only", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb"]
+    cmd_tb = [verilator, "--lint-only", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_FILES + TB_INTEGRATION_FILES + ["--top-module", "spi_tb"]
     rc_tb = run_cmd(cmd_tb)
     if rc_tb == 0:
         print("[SUCCESS] Verilator lint passed with 0 warnings/errors!")
@@ -68,7 +76,7 @@ def do_sim_verilator():
         return 1
     
     print("\n================ Compiling with Verilator ================")
-    cmd = [verilator, "--binary", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_FILES + TB_FILES + ["--top-module", "spi_tb", "--trace"]
+    cmd = [verilator, "--binary", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_FILES + TB_INTEGRATION_FILES + ["--top-module", "spi_tb", "--trace"]
     rc = run_cmd(cmd)
     if rc != 0:
         print("[FAIL] Verilator compilation failed.")
@@ -89,7 +97,7 @@ def do_sim_iverilog():
         return 1
     
     out_file = os.path.join(SIM_DIR, "spi_tb.out")
-    cmd_compile = [iverilog, "-g2012", "-Wall", "-o", out_file] + RTL_FILES + TB_FILES
+    cmd_compile = [iverilog, "-g2012", "-Wall", "-o", out_file] + RTL_FILES + TB_INTEGRATION_FILES
     rc = run_cmd(cmd_compile)
     if rc != 0:
         return rc

@@ -1,16 +1,17 @@
 # ==============================================================================
 # run_vivado.tcl - Reproducible AMD Vivado Automation Flow for SPI IP Core
 #
+# Target Platform:    TUL PYNQ-Z2 (AMD Zynq-7020 xc7z020clg400-1)
 # Supported execution modes:
 #   -mode elaborate : Perform non-device-specific RTL elaboration & design analysis
-#   -mode synth     : Synthesize IP core for the specified target FPGA part (OOC)
+#   -mode synth     : Synthesize IP core for the target FPGA part (OOC)
 #   -mode impl      : Run complete flow: Synthesis -> opt -> place -> phys_opt -> route
 #   -mode sim       : Execute functional verification using AMD Vivado XSim
 #   -mode all       : Run implementation flow followed by XSim functional verification
 #
 # Usage examples:
 #   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate
-#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7a35tcsg324-1
+#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7z020clg400-1
 #   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode sim
 # ==============================================================================
 
@@ -18,14 +19,14 @@ set SCRIPT_DIR  [file normalize [file dirname [info script]]]
 set REPO_DIR    [file normalize "$SCRIPT_DIR/../.."]
 set RTL_DIR     "$REPO_DIR/rtl"
 set TB_DIR      "$REPO_DIR/tb"
-set CONSTR_DIR  "$REPO_DIR/constraints"
+set CONSTR_DIR  "$REPO_DIR/constraints/pynq_z2"
 set REPORTS_DIR "$REPO_DIR/reports/vivado"
 
-# Default configuration
+# Default configuration targeting PYNQ-Z2 Zynq-7020
 set MODE        "elaborate"
 set TOP         "spi_master_top"
-set PART        "xc7a35tcsg324-1"
-set CONSTRAINTS "$CONSTR_DIR/spi_master_top.xdc"
+set PART        "xc7z020clg400-1"
+set CONSTRAINTS "$CONSTR_DIR/pynq_z2_timing.xdc"
 
 # Parse command line arguments
 for {set i 0} {$i < [llength $argv]} {incr i} {
@@ -49,25 +50,25 @@ puts "  AMD Vivado IP Core Automation Flow"
 puts "  Repository Root : $REPO_DIR"
 puts "  Mode            : $MODE"
 puts "  Top Module      : $TOP"
-puts "  FPGA Part       : $PART"
+puts "  Target Part     : $PART (TUL PYNQ-Z2)"
 puts "=================================================================="
 
 # RTL Compilation Order: spi_pkg MUST be compiled first
 set RTL_SOURCES [list \
-    "$RTL_DIR/spi_pkg.sv" \
-    "$RTL_DIR/spi_clock_gen.sv" \
-    "$RTL_DIR/spi_bit_counter.sv" \
-    "$RTL_DIR/spi_tx_shift.sv" \
-    "$RTL_DIR/spi_rx_shift.sv" \
-    "$RTL_DIR/spi_cs_ctrl.sv" \
-    "$RTL_DIR/spi_master_fsm.sv" \
-    "$RTL_DIR/spi_perf_counters.sv" \
-    "$RTL_DIR/spi_master.sv" \
-    "$RTL_DIR/spi_master_top.sv" \
-    "$RTL_DIR/spi_top.sv" \
-    "$RTL_DIR/spi_slave.sv" \
-    "$RTL_DIR/spi_slave_top.sv" \
-    "$RTL_DIR/spi_pad_wrapper.sv" \
+    "$RTL_DIR/common/spi_pkg.sv" \
+    "$RTL_DIR/master/spi_clock_gen.sv" \
+    "$RTL_DIR/master/spi_bit_counter.sv" \
+    "$RTL_DIR/master/spi_tx_shift.sv" \
+    "$RTL_DIR/master/spi_rx_shift.sv" \
+    "$RTL_DIR/master/spi_cs_ctrl.sv" \
+    "$RTL_DIR/master/spi_master_fsm.sv" \
+    "$RTL_DIR/master/spi_perf_counters.sv" \
+    "$RTL_DIR/master/spi_master.sv" \
+    "$RTL_DIR/master/spi_master_top.sv" \
+    "$RTL_DIR/master/spi_top.sv" \
+    "$RTL_DIR/slave/spi_slave.sv" \
+    "$RTL_DIR/slave/spi_slave_top.sv" \
+    "$RTL_DIR/common/spi_pad_wrapper.sv" \
 ]
 
 proc read_all_rtl {} {
@@ -94,7 +95,7 @@ proc run_xsim_sim {} {
     foreach src $RTL_SOURCES {
         lappend xvlog_args $src
     }
-    lappend xvlog_args "$TB_DIR/spi_tb.sv"
+    lappend xvlog_args "$TB_DIR/integration/spi_tb.sv"
     
     if {[catch {exec {*}$xvlog_args} xvlog_out]} {
         puts $xvlog_out

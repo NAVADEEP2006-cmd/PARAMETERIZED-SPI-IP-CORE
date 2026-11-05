@@ -9,22 +9,22 @@ VVP       ?= vvp
 RTL_DIR = ../rtl
 TB_DIR  = ../tb
 
-RTL_SRCS = $(RTL_DIR)/spi_pkg.sv \
-           $(RTL_DIR)/spi_clock_gen.sv \
-           $(RTL_DIR)/spi_bit_counter.sv \
-           $(RTL_DIR)/spi_tx_shift.sv \
-           $(RTL_DIR)/spi_rx_shift.sv \
-           $(RTL_DIR)/spi_cs_ctrl.sv \
-           $(RTL_DIR)/spi_master_fsm.sv \
-           $(RTL_DIR)/spi_perf_counters.sv \
-           $(RTL_DIR)/spi_master.sv \
-           $(RTL_DIR)/spi_master_top.sv \
-           $(RTL_DIR)/spi_top.sv \
-           $(RTL_DIR)/spi_slave.sv \
-           $(RTL_DIR)/spi_slave_top.sv \
-           $(RTL_DIR)/spi_pad_wrapper.sv
+RTL_SRCS = $(RTL_DIR)/common/spi_pkg.sv \
+           $(RTL_DIR)/master/spi_clock_gen.sv \
+           $(RTL_DIR)/master/spi_bit_counter.sv \
+           $(RTL_DIR)/master/spi_tx_shift.sv \
+           $(RTL_DIR)/master/spi_rx_shift.sv \
+           $(RTL_DIR)/master/spi_cs_ctrl.sv \
+           $(RTL_DIR)/master/spi_master_fsm.sv \
+           $(RTL_DIR)/master/spi_perf_counters.sv \
+           $(RTL_DIR)/master/spi_master.sv \
+           $(RTL_DIR)/master/spi_master_top.sv \
+           $(RTL_DIR)/master/spi_top.sv \
+           $(RTL_DIR)/slave/spi_slave.sv \
+           $(RTL_DIR)/slave/spi_slave_top.sv \
+           $(RTL_DIR)/common/spi_pad_wrapper.sv
 
-TB_SRCS = $(TB_DIR)/spi_tb.sv
+TB_SRCS = $(TB_DIR)/integration/spi_tb.sv
 
 .PHONY: all lint sim sim-binary sim-iverilog clean wave
 
