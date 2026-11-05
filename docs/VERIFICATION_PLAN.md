@@ -54,7 +54,7 @@ The verification plan identifies 12 core functional categories:
 
 ## 3. Integration Testbench Suite Catalog (`tb/integration/spi_tb.sv`)
 
-The self-checking integration testbench implements **16 structured test suites**. The SystemVerilog source contains **58 static `check_result` calls**. At runtime, iterative loops in Test 8 (4 iterations) and Test 12 (4 slave selections $\times$ 1 active check + 3 mutual-exclusion checks) execute a total of **74 dynamic assertions**:
+The self-checking integration testbench implements **16 structured test suites**. The SystemVerilog source contains **57 actual static `check_result` call sites**. At runtime, iterative loops in Test 8 (4 iterations) and Test 12 (4 slave selections $\times$ 1 active check + 3 mutual-exclusion checks) execute a total of **74 dynamic assertions**:
 
 ```text
 Suite 01: Reset & Idle Pin Verification (7 checks)
@@ -73,12 +73,29 @@ Suite 13: Synchronous Reset During Active Transaction (5 checks)
 Suite 14: Single-Bit Word Transfer Boundary (4 checks)
 Suite 15: Minimum Legal Clock Divider Boundary (3 checks)
 Suite 16: Reset Lifecycle Verification (Reset-Before & Reset-After Transfer: 8 checks)
-Total: 74 Automated Runtime Checks (100% Passing)
+Total: 74 Automated Runtime Checks (74 passed, 0 failed in CI)
 ```
 
 ---
 
-## 4. Execution Commands & Reproduction
+## 4. Dedicated Board Demonstration Top Testbench (`tb/board/tb_spi_pynq_z2_top.sv`)
+
+A dedicated self-checking testbench validates the physical hardware demonstration wrapper (`spi_pynq_z2_top.sv`):
+
+```text
+Test 1: Reset Startup and Release Behaviour (7 checks)
+Test 2: Start-Button Synchronization and Contact Debouncing (3 checks)
+Test 3: Exactly One Transaction Per Button Press - Hold Test (3 checks)
+Test 4: Slave Selection from Slide Switches SW[1:0] across 4 slaves (16 checks)
+Test 5: Transaction Payload Progression on MOSI: 0xAC, 0xAD (2 checks)
+Test 6: Status LED Behaviour: busy, active, pulse-stretched done, error (6 checks)
+Test 7: SPI Outputs and Chip-Select Timing (4 checks)
+Total: 41 Automated Board-Level Runtime Checks
+```
+
+---
+
+## 5. Execution Commands & Reproduction
 
 ### Verilator RTL & Full Testbench Lint
 ```bash
@@ -102,6 +119,13 @@ python sim/run_sim.py shift_regs    # TX/RX shift registers unit test
 python sim/run_sim.py master_fsm    # Master transaction FSM unit test
 ```
 
+### Dedicated Board Top Testbench
+```bash
+python sim/run_sim.py board
+# or via Makefile
+make -C sim board
+```
+
 ### Icarus Verilog Integration Simulation
 ```bash
 python sim/run_sim.py integration
@@ -123,9 +147,11 @@ vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode
 
 ---
 
-## 5. Truthful Reporting of Verification Results
+## 6. Truthful Reporting of Verification Results
 
-> [!NOTE]
-> - **Continuous Integration (CI):** The integration testbench (`spi_tb.sv`) is verified via GitHub Actions (`.github/workflows/spi-ci.yml`) using Verilator 5.032 and Icarus Verilog 12.0, passing all 74 assertions with zero errors.
-> - **Local Tool Availability:** On host development machines without local EDA installations, automated CI provides the primary authoritative execution log.
-> - **Planned Extensions:** Multi-device scheduler testbenches will be introduced in milestone M4 upon completion of scheduler RTL.
+To maintain strict engineering accuracy, verification claims are partitioned across distinct development tiers:
+
+1. **Core Simulation Verification:** The standalone IP core (`spi_master_top.sv`) and full-duplex loopback wrapper (`spi_pad_wrapper.sv`) are verified with 5 unit testbenches and 16 integration suites (57 static `check_result` call sites, 74 dynamic runtime checks, **74 passed, 0 failed** in automated GitHub Actions CI).
+2. **Board Demonstration Top Simulation:** The board demonstration wrapper (`spi_pynq_z2_top.sv`) has a dedicated testbench (`tb_spi_pynq_z2_top.sv`) executing 41 assertions across reset, debouncing, single-pulse generation, switch CS mapping, MOSI payload progression, and LED stretch behavior.
+3. **AMD Vivado Implementation Flow:** Batch synthesis and implementation scripts (`scripts/vivado/run_vivado.tcl`) provide an automated flow for both OOC core synthesis and board-top implementation on the Zynq-7020 target (`xc7z020clg400-1`). Bitstream generation is available when executed in a Vivado installation environment.
+4. **Physical Hardware Bench Testing:** Bitstream programming, oscilloscope bus probing, and physical peripheral interfacing (Bosch BMI160, Microchip 25LC256) on the physical TUL PYNQ-Z2 hardware represent the laboratory validation baseline and remain pending bench instrumentation.

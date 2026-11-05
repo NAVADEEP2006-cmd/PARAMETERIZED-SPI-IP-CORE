@@ -10,7 +10,7 @@ The physical hardware demonstration target for this IP core is the **TUL PYNQ-Z2
 |                                                                                   |
 |   +--------------------------+    +-------------------------------------------+   |
 |   | Realtek RTL8211E-VL PHY  |    | AMD Zynq-7020 SoC (xc7z020clg400-1)       |   |
-|   | Pin H16 (125 MHz PL clk) |--> |                                           |   |
+|   | U5 pin 46 -> H16 (125M)  |--> |                                           |   |
 |   +--------------------------+    |   +-----------------------------------+   |   |
 |                                   |   | Board Top (spi_pynq_z2_top.sv)    |   |   |
 |   +--------------------------+    |   | - 2-stage input synchronizers     |   |   |
@@ -54,12 +54,12 @@ The physical hardware demonstration target for this IP core is the **TUL PYNQ-Z2
 ## 2. Clock Architecture Analysis
 
 ### 2.1 PL Reference Clock Source (Pin H16)
-- **Physical Source:** The 125.0 MHz single-ended clock supplied to PL package pin `H16` (Bank 35) is driven by the onboard **Realtek RTL8211E-VL Gigabit Ethernet PHY** (transceiver IC `U5`, pin 40 `CLK125`).
+- **Physical Source:** The 125.0 MHz single-ended clock supplied to PL package pin `H16` (Bank 35) is driven by the onboard **Realtek RTL8211E-VL Gigabit Ethernet PHY** (transceiver IC `U5`, pin 46 `CLK125`).
 - **Operating Note:** Because this reference clock originates from the Ethernet PHY rather than a dedicated standalone crystal oscillator, its stability depends on the power and initialization state of the PHY. In bare-metal PL bitstream workflows without active Ethernet linking, users should observe that the PHY clock runs freely once power is applied, but proper PCB power stabilization must be observed.
 - **Clock Management Reality:** **No MMCM or Clocking Wizard IP is instantiated in this RTL baseline.** The design does not rely on imaginary clock generators. Instead:
   1. **Board Demonstration Wrapper (`spi_pynq_z2_top.sv`):** Clocks the core synchronously at 125.0 MHz directly from `sysclk` (pin `H16`). With `CLOCK_DIVIDER = 15`, the resulting SPI serial clock is:
      $$f_{\text{SCLK}} = \frac{125\text{ MHz}}{2 \times 15} = 4.167\text{ MHz}$$
-     This is well within the 5.0 MHz signal-integrity limit required for unshielded Pmod flying leads.
+     This is a conservative initial operating target pending physical measurement (< 5 MHz recommended for unshielded Pmod headers).
   2. **SoC Production Target (Zynq PS-to-PL):** In a production Zynq-7000 SoC design, clocking is typically sourced from the Processing System's programmable clock generator (`FCLK_CLK0` configured to 50 MHz) and bridged via AXI4-Lite.
   3. **Out-of-Context (OOC) IP Budget:** Standalone IP synthesis (`spi_master_top.sv`) uses `pynq_z2_timing.xdc` defining a 50.0 MHz synchronous clock budget (20.0 ns period).
 
@@ -67,22 +67,24 @@ The physical hardware demonstration target for this IP core is the **TUL PYNQ-Z2
 
 ## 3. Authoritative Board Pin & Bank Allocations
 
-All pin mappings are verified against the authoritative **TUL PYNQ-Z2 Schematic (Rev C)** and AMD Zynq-7000 CLG400 package pinouts.
+All pin mappings are verified against the authoritative **official TUL PYNQ-Z2 Reference Manual v1.1** and **TUL PYNQ-Z2 Schematic (Rev C)** CLG400 package pinouts.
 
-### 3.1 Bank 35 Allocations (System Clocks & User Controls, VCCO = 3.3V)
+### 3.1 Bank 35 Allocations (System Clocks, User Controls, & High-Index LEDs, VCCO = 3.3V)
 
 | Port Name | FPGA Pin | Board Component | Bank | I/O Standard | Description |
 |---|:---:|:---:|:---:|:---:|---|
-| `sysclk` | **H16** | Ethernet PHY CLK125 | 35 | `LVCMOS33` | 125.0 MHz PL reference clock |
+| `sysclk` | **H16** | Ethernet PHY U5 pin 46 (CLK125) | 35 | `LVCMOS33` | 125.0 MHz PL reference clock |
 | `reset_btn` | **D19** | Pushbutton BTN0 | 35 | `LVCMOS33` | Synchronous active-high reset |
-| `start_btn` | **D20** | Pushbutton BTN1 | 35 | `LVCMOS33` | Manual transaction trigger pulse |
+| `start_btn` | **D20** | Pushbutton BTN1 | 35 | `LVCMOS33` | Manual transaction trigger pulse (debounced) |
 | `sw_slave_sel[0]` | **M20** | Slide Switch SW0 | 35 | `LVCMOS33` | Slave selection address bit 0 |
 | `sw_slave_sel[1]` | **M19** | Slide Switch SW1 | 35 | `LVCMOS33` | Slave selection address bit 1 |
+| `led_error` | **N16** | Onboard LED LD2 | **35** | `LVCMOS33` | Pulse-stretched error / reject indicator |
+| `led_active` | **M14** | Onboard LED LD3 | **35** | `LVCMOS33` | Transfer active indicator |
 
-### 3.2 Bank 34 Allocations (Pmod B & Status LEDs, VCCO = 3.3V)
+### 3.2 Bank 34 Allocations (Pmod B & Low-Index LEDs, VCCO = 3.3V)
 
 > [!IMPORTANT]
-> Authoritative schematic verification confirms that **Pmod B (Header JB) and user LEDs LD[3:0] are located on Bank 34**, not Bank 13. All signals interface at 3.3V LVCMOS.
+> Authoritative schematic verification confirms that **Pmod B (Header JB) and user LEDs LD[1:0] are located on Bank 34**, while **user LEDs LD[3:2] are located on Bank 35**. All signals interface at 3.3V LVCMOS.
 
 | Port Name | FPGA Pin | Connector Pin | Bank | I/O Standard | Drive / Slew | Description |
 |---|:---:|:---:|:---:|:---:|:---:|---|
@@ -98,8 +100,6 @@ All pin mappings are verified against the authoritative **TUL PYNQ-Z2 Schematic 
 | `VCC` | 3.3V Power | Pmod B Pins 6, 12 | N/A | 3.3V | N/A | 3.3V auxiliary power output |
 | `led_busy` | **R14** | Onboard LED LD0 | **34** | `LVCMOS33` | 4 mA / SLOW | High during active transaction |
 | `led_done` | **P14** | Onboard LED LD1 | **34** | `LVCMOS33` | 4 mA / SLOW | Pulse-stretched transfer complete indicator |
-| `led_error` | **N16** | Onboard LED LD2 | **34** | `LVCMOS33` | 4 mA / SLOW | Pulse-stretched error / reject indicator |
-| `led_active` | **M14** | Onboard LED LD3 | **34** | `LVCMOS33` | 4 mA / SLOW | Core active heartbeat |
 
 ---
 

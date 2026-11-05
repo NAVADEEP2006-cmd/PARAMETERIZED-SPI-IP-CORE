@@ -51,6 +51,10 @@ TB_INTEGRATION = [
     os.path.join(TB_DIR, "integration", "spi_tb.sv")
 ]
 
+TB_BOARD = [
+    os.path.join(TB_DIR, "board", "tb_spi_pynq_z2_top.sv")
+]
+
 # Modular Unit Test Definitions: Testbench, exact RTL dependencies, and top module
 UNIT_TEST_SPECS = {
     "clock_gen": {
@@ -139,6 +143,13 @@ def do_lint():
     if rc_board != 0:
         print("[FAIL] Verilator board top lint failed.")
         return rc_board
+
+    print("\n================ Running Verilator Board Top TB Lint ================")
+    cmd_board_tb = [verilator, "--lint-only", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_ALL + TB_BOARD + ["--top-module", "tb_spi_pynq_z2_top"]
+    rc_board_tb = run_cmd(cmd_board_tb)
+    if rc_board_tb != 0:
+        print("[FAIL] Verilator board top TB lint failed.")
+        return rc_board_tb
     
     print("\n================ Running Verilator Full Lint ================")
     cmd_tb = [verilator, "--lint-only", "--timing", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + rtl_no_board + TB_INTEGRATION + ["--top-module", "spi_tb"]
@@ -211,6 +222,28 @@ def do_sim_iverilog():
         print("[FAIL] Integration simulation failed.")
     return rc
 
+def do_sim_board():
+    iverilog, vvp = check_iverilog()
+    if not iverilog or not vvp:
+        return 1
+    
+    print("\n================ Compiling Board Top Testbench with Icarus Verilog ================")
+    out_file = os.path.join(SIM_DIR, "tb_spi_pynq_z2_top.out")
+    cmd_compile = [iverilog, "-g2012", "-Wall", "-s", "tb_spi_pynq_z2_top", "-o", out_file] + RTL_ALL + TB_BOARD
+    rc = run_cmd(cmd_compile)
+    if rc != 0:
+        print("[FAIL] Icarus Verilog board top testbench compilation failed.")
+        return rc
+    
+    print("\n================ Executing Board Top Simulation Suite ================")
+    cmd_run = [vvp, out_file]
+    rc = run_cmd(cmd_run)
+    if rc == 0:
+        print("[SUCCESS] Board top testbench passed!")
+    else:
+        print("[FAIL] Board top simulation failed.")
+    return rc
+
 def do_sim_verilator():
     verilator = check_verilator()
     if not verilator:
@@ -237,7 +270,7 @@ def do_sim_verilator():
     return rc
 
 def do_clean():
-    clean_items = ["obj_dir", "spi_tb.vcd", "spi_tb.out"] + [f"{s['top']}.out" for s in UNIT_TEST_SPECS.values()]
+    clean_items = ["obj_dir", "spi_tb.vcd", "spi_tb.out", "tb_spi_pynq_z2_top.vcd", "tb_spi_pynq_z2_top.out"] + [f"{s['top']}.out" for s in UNIT_TEST_SPECS.values()]
     for item in clean_items:
         p = os.path.join(SIM_DIR, item)
         if os.path.isdir(p):
@@ -264,6 +297,10 @@ def do_all():
     if rc != 0:
         return rc
     
+    rc = do_sim_board()
+    if rc != 0:
+        return rc
+
     rc = do_sim_iverilog()
     return rc
 
@@ -271,7 +308,7 @@ def main():
     parser = argparse.ArgumentParser(description="SPI IP Verification Automation Runner")
     parser.add_argument("action", choices=[
         "lint", "clock_gen", "bit_counter", "cs_ctrl", "shift_regs", "master_fsm",
-        "unit", "integration", "iverilog", "sim", "all", "clean"
+        "unit", "board", "board_top", "integration", "iverilog", "sim", "all", "clean"
     ], default="lint", nargs="?",
     help="Verification action to execute")
     args = parser.parse_args()
@@ -284,6 +321,8 @@ def main():
         return run_single_unit_test(args.action)
     elif args.action == "unit":
         return do_unit_tests()
+    elif args.action in ["board", "board_top"]:
+        return do_sim_board()
     elif args.action in ["integration", "iverilog"]:
         return do_sim_iverilog()
     elif args.action == "sim":

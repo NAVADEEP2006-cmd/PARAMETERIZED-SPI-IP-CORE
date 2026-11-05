@@ -3,13 +3,13 @@
 #
 # Target Board:       TUL PYNQ-Z2 (xc7z020clg400-1)
 # Top-Level Target:   spi_pynq_z2_top
-# Documentation Ref:  TUL PYNQ-Z2 Schematic Rev C / User Manual v1.0
+# Documentation Ref:  TUL PYNQ-Z2 Schematic Rev C / Reference Manual v1.1
 #
 # Hardware Integration Status: PROPOSED (Laboratory physical validation baseline)
 #
 # FPGA Bank Allocation Summary:
 #   - Bank 35 (VCCO = 3.3V):
-#       sysclk       -> H16 (125 MHz PL reference clock from Ethernet PHY U5)
+#       sysclk       -> H16 (125 MHz PL reference clock from Ethernet PHY U5 pin 46)
 #       reset_btn    -> D19 (Pushbutton BTN0 - active-high reset)
 #       start_btn    -> D20 (Pushbutton BTN1 - initiate transaction)
 #       sw_slave_sel -> M20 (SW0), M19 (SW1) (Slide switches for slave select)
@@ -23,14 +23,14 @@
 #         pad_cs_n[2]  -> W16 (Pin 8, JB3_N)
 #         pad_cs_n[3]  -> V12 (Pin 9, JB4_P)
 #       User Diagnostic LEDs:
-#         led_busy     -> R14 (LD0 - Core Busy)
-#         led_done     -> P14 (LD1 - Transfer Done)
-#         led_error    -> N16 (LD2 - Core Error)
-#         led_active   -> M14 (LD3 - Transfer Active)
+#         led_busy     -> R14 (LD0 - Core Busy, Bank 34)
+#         led_done     -> P14 (LD1 - Transfer Done, Bank 34)
+#         led_error    -> N16 (LD2 - Core Error, Bank 35)
+#         led_active   -> M14 (LD3 - Transfer Active, Bank 35)
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. Primary Clock (125 MHz Ethernet PHY Output -> H16, Bank 35)
+# 1. Primary Clock (125 MHz from Realtek RTL8211E-VL PHY U5 pin 46 CLK125 -> H16, Bank 35)
 # ------------------------------------------------------------------------------
 set_property PACKAGE_PIN H16 [get_ports sysclk]
 set_property IOSTANDARD LVCMOS33 [get_ports sysclk]
@@ -90,19 +90,19 @@ set_property IOSTANDARD LVCMOS33 [get_ports {pad_cs_n[3]}]
 # ------------------------------------------------------------------------------
 # 4. User Status LEDs (Bank 34, LVCMOS33)
 # ------------------------------------------------------------------------------
-# LD0: Core Busy
+# LD0: Core Busy (Bank 34)
 set_property PACKAGE_PIN R14 [get_ports led_busy]
 set_property IOSTANDARD LVCMOS33 [get_ports led_busy]
 
-# LD1: Transfer Complete (Done)
+# LD1: Transfer Complete (Done) (Bank 34)
 set_property PACKAGE_PIN P14 [get_ports led_done]
 set_property IOSTANDARD LVCMOS33 [get_ports led_done]
 
-# LD2: Transaction / Slave Error
+# LD2: Transaction / Slave Error (Bank 35)
 set_property PACKAGE_PIN N16 [get_ports led_error]
 set_property IOSTANDARD LVCMOS33 [get_ports led_error]
 
-# LD3: Transfer Active Heartbeat
+# LD3: Transfer Active Indicator (Bank 35)
 set_property PACKAGE_PIN M14 [get_ports led_active]
 set_property IOSTANDARD LVCMOS33 [get_ports led_active]
 

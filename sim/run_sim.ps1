@@ -42,6 +42,7 @@ $RtlAll = @(
 )
 $RtlBoard = Join-Path $RtlDir "board\spi_pynq_z2_top.sv"
 $TbIntegration = Join-Path $TbDir "integration\spi_tb.sv"
+$TbBoard = Join-Path $TbDir "board\tb_spi_pynq_z2_top.sv"
 
 function Run-UnitTest {
     param(
@@ -114,6 +115,22 @@ switch ($Action.ToLower()) {
         }
         Write-Host "`n[SUMMARY] All 5 unit testbenches PASSED!" -ForegroundColor Green
         exit 0
+    }
+    "board" {
+        Write-Host "--- Running Board Top Verification Testbench (Icarus Verilog) ---" -ForegroundColor Cyan
+        $OutFile = Join-Path $ScriptDir "tb_spi_pynq_z2_top.out"
+        & iverilog -g2012 -Wall -s tb_spi_pynq_z2_top -o $OutFile $RtlAll $RtlBoard $TbBoard
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & vvp $OutFile
+        exit $LASTEXITCODE
+    }
+    "board_top" {
+        Write-Host "--- Running Board Top Verification Testbench (Icarus Verilog) ---" -ForegroundColor Cyan
+        $OutFile = Join-Path $ScriptDir "tb_spi_pynq_z2_top.out"
+        & iverilog -g2012 -Wall -s tb_spi_pynq_z2_top -o $OutFile $RtlAll $RtlBoard $TbBoard
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & vvp $OutFile
+        exit $LASTEXITCODE
     }
     "integration" {
         Write-Host "--- Running Complete SPI Integration Test (Icarus Verilog) ---" -ForegroundColor Cyan

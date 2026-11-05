@@ -11,10 +11,10 @@
 //
 // Clock Architecture:
 //   - Physical Reference Clock: 125.0 MHz single-ended clock on pin H16 (Bank 35)
-//     sourced from the onboard Realtek RTL8211E-VL Ethernet PHY (U5, pin 40 CLK125).
+//     sourced from the onboard Realtek RTL8211E-VL Ethernet PHY (U5, pin 46 CLK125).
 //   - Core Operating Frequency: Operates synchronously on the 125 MHz reference clock.
 //   - SCLK Generation: With CLOCK_DIVIDER = 15, SCLK = 125 MHz / (2 * 15) = 4.167 MHz.
-//     This complies with Pmod unshielded flying-lead signal integrity requirements (< 5 MHz).
+//     This is a conservative initial operating target pending physical measurement (< 5 MHz recommended for unshielded Pmod headers).
 //   - Note: In a full Zynq PS+PL production design, a 50 MHz clock would typically be
 //     supplied by the Processing System (FCLK_CLK0) via an AXI-to-SPI bridge.
 //     No MMCM or Clocking Wizard IP is instantiated in this standalone RTL baseline.
@@ -34,21 +34,24 @@
 //       pad_cs_n[1]  -> V16 (Pin 7, JB3_P)
 //       pad_cs_n[2]  -> W16 (Pin 8, JB3_N)
 //       pad_cs_n[3]  -> V12 (Pin 9, JB4_P)
-//   - Status LEDs (Bank 34, LVCMOS33):
-//       led_busy     -> R14 (LD0)
-//       led_done     -> P14 (LD1)
-//       led_error    -> N16 (LD2)
-//       led_active   -> M14 (LD3 - transfer active / heartbeat)
+//   - Status LEDs:
+//       led_busy     -> R14 (LD0, Bank 34, LVCMOS33)
+//       led_done     -> P14 (LD1, Bank 34, LVCMOS33)
+//       led_error    -> N16 (LD2, Bank 35, LVCMOS33)
+//       led_active   -> M14 (LD3 - Transfer Active Indicator, Bank 35, LVCMOS33)
 // -----------------------------------------------------------------------------
 
 module spi_pynq_z2_top
   import spi_pkg::*;
 #(
-  parameter int DATA_WIDTH    = 8,
-  parameter int CLOCK_DIVIDER = 15, // 125 MHz / (2 * 15) = 4.167 MHz SCLK
-  parameter int SPI_MODE      = 0,
-  parameter int NUM_SLAVES    = 4,
-  parameter bit LSB_FIRST     = 1'b0
+  parameter int DATA_WIDTH          = 8,
+  parameter int CLOCK_DIVIDER       = 15, // 125 MHz / (2 * 15) = 4.167 MHz SCLK
+  parameter int SPI_MODE            = 0,
+  parameter int NUM_SLAVES          = 4,
+  parameter bit LSB_FIRST           = 1'b0,
+  parameter int DEBOUNCE_LIMIT      = 1_250_000, // ~10 ms at 125 MHz (override in TB)
+  parameter int DONE_STRETCH_CYCLES = 12_500_000, // ~100 ms at 125 MHz (override in TB)
+  parameter int ERR_STRETCH_CYCLES  = 31_250_000  // ~250 ms at 125 MHz (override in TB)
 )(
   // Physical Board Clock & User Controls
   input  logic                      sysclk,         // 125 MHz PL Reference Clock (H16)
@@ -66,13 +69,18 @@ module spi_pynq_z2_top
   output logic                      led_busy,       // LD0 (R14) - Core Busy
   output logic                      led_done,       // LD1 (P14) - Transfer Complete
   output logic                      led_error,      // LD2 (N16) - Transaction / Select Error
-  output logic                      led_active      // LD3 (M14) - Transfer Active Heartbeat
+  output logic                      led_active      // LD3 (M14) - Transfer Active Indicator
 );
 
   // ---------------------------------------------------------------------------
   // 1. Synchronizers and Edge Detectors for Pushbuttons
   // ---------------------------------------------------------------------------
-  logic [1:0] rst_sync;
+  // Reliable startup and reset synchronization:
+  // rst_sync initializes to 2'b00. In FPGA fabric (e.g. Zynq-7000 GSR), registers
+  // power up to 0 unless initialized otherwise.
+  // Active-high reset_btn (BTN0) is synchronized through a 2-stage flip-flop chain
+  // to prevent metastability, asserting core_reset synchronously to sysclk.
+  logic [1:0] rst_sync = 2'b00;
   logic       core_reset;
 
   always_ff @(posedge sysclk) begin
@@ -80,19 +88,44 @@ module spi_pynq_z2_top
   end
   assign core_reset = rst_sync[1];
 
-  logic [1:0] start_sync;
-  logic       start_d;
-  logic       start_pulse;
+  // Start pushbutton (BTN1) synchronizer, debouncer, and single-pulse detector:
+  // Physical pushbuttons bounce for multiple milliseconds. The debouncer ensures
+  // that start_debounced only transitions when start_sync[1] remains stable for
+  // DEBOUNCE_LIMIT consecutive clock cycles (~10 ms at 125 MHz).
+  // A single-cycle start_pulse is generated on the rising edge of start_debounced,
+  // guaranteeing exactly one transaction trigger per physical press.
+  logic [1:0]  start_sync;
+  logic        start_debounced;
+  logic        start_debounced_d;
+  logic        start_pulse;
+  logic [23:0] debounce_cnt;
 
   always_ff @(posedge sysclk) begin
     if (core_reset) begin
-      start_sync  <= 2'b00;
-      start_d     <= 1'b0;
-      start_pulse <= 1'b0;
+      start_sync        <= 2'b00;
+      start_debounced   <= 1'b0;
+      start_debounced_d <= 1'b0;
+      start_pulse       <= 1'b0;
+      debounce_cnt      <= 24'd0;
     end else begin
-      start_sync  <= {start_sync[0], start_btn};
-      start_d     <= start_sync[1];
-      start_pulse <= start_sync[1] & ~start_d; // 1-cycle edge detect
+      // 2-stage metastability synchronizer
+      start_sync <= {start_sync[0], start_btn};
+
+      // Debounce filter
+      if (start_sync[1] != start_debounced) begin
+        if (debounce_cnt >= 24'(DEBOUNCE_LIMIT)) begin
+          start_debounced <= start_sync[1];
+          debounce_cnt    <= 24'd0;
+        end else begin
+          debounce_cnt <= debounce_cnt + 24'd1;
+        end
+      end else begin
+        debounce_cnt <= 24'd0;
+      end
+
+      // Single-cycle pulse on rising edge of debounced button state
+      start_debounced_d <= start_debounced;
+      start_pulse       <= start_debounced & ~start_debounced_d;
     end
   end
 
@@ -184,9 +217,9 @@ module spi_pynq_z2_top
       err_stretch_cnt  <= 28'd0;
       err_led_reg      <= 1'b0;
     end else begin
-      // Done stretch: ~100 ms at 125 MHz (12,500,000 cycles)
+      // Done stretch: ~100 ms at 125 MHz (12,500,000 cycles default)
       if (core_done) begin
-        done_stretch_cnt <= 28'd12_500_000;
+        done_stretch_cnt <= 28'(DONE_STRETCH_CYCLES);
         done_led_reg     <= 1'b1;
       end else if (done_stretch_cnt > 28'd0) begin
         done_stretch_cnt <= done_stretch_cnt - 28'd1;
@@ -194,9 +227,9 @@ module spi_pynq_z2_top
         done_led_reg     <= 1'b0;
       end
 
-      // Error stretch: ~250 ms at 125 MHz (31,250,000 cycles)
+      // Error stretch: ~250 ms at 125 MHz (31,250,000 cycles default)
       if (core_error || core_select_error) begin
-        err_stretch_cnt <= 28'd31_250_000;
+        err_stretch_cnt <= 28'(ERR_STRETCH_CYCLES);
         err_led_reg     <= 1'b1;
       end else if (err_stretch_cnt > 28'd0) begin
         err_stretch_cnt <= err_stretch_cnt - 28'd1;

@@ -221,6 +221,9 @@ flowchart TD
 
 > [!IMPORTANT]
 > The Multi-Device Transaction Scheduler is currently in the architectural specification phase. The synthesizable RTL arbiter and descriptor queues are planned extensions and are not included in the baseline RTL.
+>
+> **Compile-Time vs. Runtime Configuration Distinction:**
+> In the current synthesizable baseline core (`spi_master.sv`), protocol parameters (`SPI_MODE`, `CLOCK_DIVIDER`, `DATA_WIDTH`, and `LSB_FIRST`) are compile-time Verilog parameters uniform across all transactions. In contrast, the planned Multi-Device Scheduler subsystem is specified to introduce dynamic per-device transaction descriptors, enabling runtime reconfiguration of clock rate, SPI mode, and word length tailored to individual attached peripherals.
 
 
 ---
@@ -230,17 +233,17 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph PYNQ_Z2_Top ["Physical Board Wrapper: spi_pynq_z2_top.sv"]
-        CLK_IN["sysclk (125 MHz from PHY H16)"]
+        CLK_IN["sysclk (125 MHz from Realtek RTL8211E-VL PHY U5 pin 46 -> H16, Bank 35)"]
         BTN_IN["reset_btn (D19), start_btn (D20)"]
         SW_IN["sw_slave_sel[1:0] (M20, M19)"]
-        SYNC["Synchronizers & Edge Detectors"]
+        SYNC["2-Stage Synchronizers, Start Debouncer & Edge Detector"]
         DEMO_GEN["Demo Pattern Generator (tx_data += 1)"]
         PULSE_EXT["LED Pulse Stretchers"]
-        LED_OUT["LEDs: busy, done, error, active"]
+        LED_OUT["LEDs: busy (LD0), done (LD1) [Bank 34]\nerror (LD2), active (LD3) [Bank 35]"]
     end
 
     subgraph Core_Top ["Reusable IP: spi_master_top.sv"]
-        CORE["SPI Master Engine (CLOCK_DIVIDER=15)"]
+        CORE["SPI Master Engine (CLOCK_DIVIDER=15 -> 4.167 MHz SCLK)"]
     end
 
     subgraph Pmod_B ["Pmod B Header JB (Bank 34)"]
@@ -259,4 +262,4 @@ flowchart TD
 ```
 
 1. **`spi_pad_wrapper.sv` (Simulation & Loopback):** Provides pad-level modeling, bidirectional tri-state MISO emulation, and self-testing loopback interconnect between master and an internal slave.
-2. **`spi_pynq_z2_top.sv` (Hardware Lab Demonstration):** Bridges physical PYNQ-Z2 board pins (125 MHz clock on H16, pushbuttons, switches, LEDs) to the reusable IP core without requiring an external AXI master or unconstrained bitstream synthesis.
+2. **`spi_pynq_z2_top.sv` (Hardware Lab Demonstration):** Bridges physical PYNQ-Z2 board pins (125 MHz clock on H16 from Ethernet PHY U5 pin 46, debounced pushbuttons, switches, LEDs) to the reusable IP core without requiring an external AXI master or unconstrained bitstream synthesis. SCLK operates at 4.167 MHz ($125\text{ MHz} / (2 \times 15)$), serving as a conservative initial operating target pending physical measurement (< 5 MHz recommended for unshielded Pmod headers).

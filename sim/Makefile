@@ -29,10 +29,11 @@ RTL_SRCS = $(RTL_DIR)/common/spi_pkg.sv \
 RTL_BOARD = $(RTL_DIR)/board/spi_pynq_z2_top.sv
 
 TB_SRCS = $(TB_DIR)/integration/spi_tb.sv
+TB_BOARD = $(TB_DIR)/board/tb_spi_pynq_z2_top.sv
 
-.PHONY: all lint unit integration sim test-clock-gen test-bit-counter test-cs-ctrl test-shift-regs test-master-fsm clean wave
+.PHONY: all lint unit board test-board integration sim test-clock-gen test-bit-counter test-cs-ctrl test-shift-regs test-master-fsm clean wave
 
-all: lint unit integration
+all: lint unit board integration
 
 # Lint RTL and TB using Verilator
 lint:
@@ -40,6 +41,8 @@ lint:
 	$(VERILATOR) --lint-only -Wall -sv $(RTL_SRCS) --top-module spi_pad_wrapper
 	@echo "--- Running Verilator Board Top Lint ---"
 	$(VERILATOR) --lint-only -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $(RTL_SRCS) $(RTL_BOARD) --top-module spi_pynq_z2_top
+	@echo "--- Running Verilator Board Top TB Lint ---"
+	$(VERILATOR) --lint-only --timing -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $(RTL_SRCS) $(RTL_BOARD) $(TB_BOARD) --top-module tb_spi_pynq_z2_top
 	@echo "--- Running Verilator Full Lint ---"
 	$(VERILATOR) --lint-only --timing -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $(RTL_SRCS) $(TB_SRCS) --top-module spi_tb
 	@echo "--- Verilator Lint Passed with 0 errors! ---"
@@ -72,6 +75,14 @@ test-master-fsm:
 
 unit: test-clock-gen test-bit-counter test-cs-ctrl test-shift-regs test-master-fsm
 	@echo "--- All 5 Unit Testbenches Passed! ---"
+
+# Dedicated Board Top Testbench using Icarus Verilog
+test-board:
+	@echo "--- Compiling and Running Board Top Testbench with Icarus Verilog ---"
+	$(IVERILOG) -g2012 -Wall -s tb_spi_pynq_z2_top -o tb_spi_pynq_z2_top.out $(RTL_SRCS) $(RTL_BOARD) $(TB_BOARD)
+	$(VVP) tb_spi_pynq_z2_top.out
+
+board: test-board
 
 # Full Integration Test using Icarus Verilog
 integration:

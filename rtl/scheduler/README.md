@@ -42,6 +42,10 @@ Interface <----|   | FIFO / Status Reg |                    |                |
 
 ## 3. Specification Requirements (Planned)
 
+> [!NOTE]
+> **Contrast with Baseline SPI IP Core:**
+> While the baseline core (`spi_master.sv`) fixes `SPI_MODE` and `CLOCK_DIVIDER` at compile time via elaboration parameters, this planned scheduler will introduce per-device dynamic configuration registers/descriptors, allowing the host to seamlessly interleave transactions targeting different SPI modes and baud rates across heterogeneous physical peripherals on the shared serial bus.
+
 ### A. Peripheral Target Profiles
 - Configurable per-slave SPI modes (e.g., Slave 0 at Mode 0, Slave 1 at Mode 3).
 - Configurable per-slave clock divider rates to match maximum SPI speeds of individual target ICs.
