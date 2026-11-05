@@ -33,7 +33,7 @@ This document provides a truthful, evidence-based status report for every subsys
 | **SPI Slave Core** | `rtl/slave/spi_slave.sv` | **Simulation Verified** | Synchronous oversampling and frame error detection validated in full-duplex loopback across all 4 modes. |
 | **Slave Tri-State Top** | `rtl/slave/spi_slave_top.sv` | **Simulation Verified** | Tri-state buffer modeling verified in full simulation suite. |
 | **Pad & Loopback Wrapper** | `rtl/common/spi_pad_wrapper.sv` | **Simulation Verified** | Loopback and external pad modes verified; serves as top module for integration testbench. |
-| **Board Demonstration Top** | `rtl/board/spi_pynq_z2_top.sv` | **Implemented — Testbench Created** | Synthesizable PYNQ-Z2 wrapper with synchronizers, start debouncer, pattern generator, LED stretchers, and pin assignments. Verified via dedicated board testbench `tb_spi_pynq_z2_top.sv` (CI verification in progress). |
+| **Board Demonstration Top** | `rtl/board/spi_pynq_z2_top.sv` | **Simulation Verified** | Synthesizable PYNQ-Z2 wrapper with synchronizers, start debouncer, pattern generator, LED stretchers, and pin assignments. Verified via dedicated board testbench `tb_spi_pynq_z2_top.sv` (41 passing checks in CI). |
 | **Multi-Device Scheduler** | `rtl/scheduler/` | **Not Started** | Architectural specification established in `rtl/scheduler/README.md`. RTL design is in planning phase. |
 
 ---
@@ -71,14 +71,14 @@ The dedicated board-level testbench (`tb/board/tb_spi_pynq_z2_top.sv`) exercises
 
 | Test Group | Verification Scope | Dynamic Checks | Status | Evidence Summary |
 |:---:|---|:---:|:---:|---|
-| **Test 1** | Reset Startup & Release Quiescent Behaviour | 7 | Pending CI | Verifies idle SCLK low, CS lines high, and all LEDs off during and post-reset. |
-| **Test 2** | Start-Button Synchronization & Contact Debouncing | 3 | Pending CI | Verifies rejection of contact bounce glitches (< DEBOUNCE_LIMIT) and valid trigger acceptance. |
-| **Test 3** | Exactly One Transaction Per Button Press | 3 | Pending CI | Verifies holding start button high executes only 1 transaction without spurious re-trigger. |
-| **Test 4** | Slave Selection from Slide Switches (SW[1:0]) | 16 | Pending CI | Verifies 1-hot chip-select decoding across all 4 slaves (1 active low + 3 idle high per slave). |
-| **Test 5** | Transaction Payload Progression | 2 | Pending CI | Verifies TX pattern incrementing across consecutive transactions (0xAC, 0xAD). |
-| **Test 6** | Status LED Behaviour & Pulse Extension | 6 | Pending CI | Verifies `led_busy`, `led_active`, pulse-stretched `led_done` (~100ms), and error LED quiescent. |
-| **Test 7** | Physical SPI Bus Outputs & Timing | 4 | Pending CI | Verifies active SCLK toggling and registered CS assertion/deassertion timing. |
-| **Total** | **Board Top Verification Suite** | **41** | **Pending CI** | **Dedicated testbench created and wired into automated CI.** |
+| **Test 1** | Reset Startup & Release Quiescent Behaviour | 7 | **PASS** | Verifies idle SCLK low, CS lines high, and all LEDs off during and post-reset. |
+| **Test 2** | Start-Button Synchronization & Contact Debouncing | 3 | **PASS** | Verifies rejection of contact bounce glitches (< DEBOUNCE_LIMIT) and valid trigger acceptance. |
+| **Test 3** | Exactly One Transaction Per Button Press | 3 | **PASS** | Verifies holding start button high executes only 1 transaction without spurious re-trigger. |
+| **Test 4** | Slave Selection from Slide Switches (SW[1:0]) | 16 | **PASS** | Verifies 1-hot chip-select decoding across all 4 slaves (1 active low + 3 idle high per slave). |
+| **Test 5** | Transaction Payload Progression | 2 | **PASS** | Verifies TX pattern incrementing across consecutive transactions (0xAC, 0xAD). |
+| **Test 6** | Status LED Behaviour & Pulse Extension | 6 | **PASS** | Verifies `led_busy`, `led_active`, pulse-stretched `led_done` (~100ms), and error LED quiescent. |
+| **Test 7** | Physical SPI Bus Outputs & Timing | 4 | **PASS** | Verifies active SCLK toggling and registered CS assertion/deassertion timing. |
+| **Total** | **Board Top Verification Suite** | **41** | **100% PASS** | **41 passed, 0 failed in CI runner.** |
 
 ---
 
@@ -89,6 +89,6 @@ To maintain strict engineering transparency, verification domains are cleanly se
 | Verification Domain | Environment | Status | Evidence / Notes |
 |---|---|:---:|---|
 | **Core Simulation Verification** | Icarus Verilog 12.0 / Verilator 5.032 (CI) | **Simulation Verified** | 5 unit testbenches + 16 integration suites (57 static calls, 74 runtime assertions: 74 passed, 0 failed in CI). |
-| **Board-Top Simulation Verification** | Icarus Verilog 12.0 (CI Workflow) | **Implemented — Testbench Created** | 7 tests (41 assertions) in `tb/board/tb_spi_pynq_z2_top.sv`; verification logged via CI runner. |
+| **Board-Top Simulation Verification** | Icarus Verilog 12.0 (CI Workflow) | **Simulation Verified** | 7 tests (41 assertions: 41 passed, 0 failed in CI) in `tb/board/tb_spi_pynq_z2_top.sv`. |
 | **AMD Vivado Implementation Flow** | AMD Vivado 2022.2+ (Batch TCL) | **Implemented — Flow Scripted** | Reproducible batch automation in `scripts/vivado/run_vivado.tcl` for OOC synth and top impl. Bitstream generation pending local tool execution. |
 | **Physical Hardware Bench Testing** | TUL PYNQ-Z2 (AMD Zynq-7020) + Lab Scope | **Planned (Proposed)** | Physical silicon programming, oscilloscope waveform verification, and BMI160/25LC256 peripheral testing pending laboratory hardware setup. |

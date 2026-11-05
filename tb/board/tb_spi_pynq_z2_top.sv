@@ -51,7 +51,7 @@ module tb_spi_pynq_z2_top;
 
   // Clock Generation (125 MHz)
   initial sysclk = 0;
-  always #(CLK_PERIOD/2) sysclk = ~sysclk;
+  always #(CLK_PERIOD/2) sysclk <= ~sysclk;
 
   // ---------------------------------------------------------------------------
   // DUT Instantiation

@@ -377,8 +377,8 @@ vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode
 | Core SPI Master & Submodules | **Simulation Verified** (74/74 CI checks pass) |
 | Modular Unit Testbenches (5 suites) | **Simulation Verified** |
 | 16-Suite Integration Testbench (74 Assertions) | **Simulation Verified** (57 static calls, 74 dynamic checks) |
-| Board Demonstration Top (`spi_pynq_z2_top.sv`) | **Implemented — Testbench Created** |
-| Dedicated Board Top Testbench (`tb_spi_pynq_z2_top.sv`) | **Implemented — Verified in CI** |
+| Board Demonstration Top (`spi_pynq_z2_top.sv`) | **Simulation Verified** |
+| Dedicated Board Top Testbench (`tb_spi_pynq_z2_top.sv`) | **Simulation Verified** (41 passed, 0 failed) |
 | PYNQ-Z2 Physical Pin Constraints (`pynq_z2_pins.xdc`) | **Implemented — Reference Verified** |
 | Vivado Implementation Batch Flow (`run_vivado.tcl`) | **Implemented — Flow Scripted** |
 | Multi-Device Transaction Scheduler RTL | **Planned (Not Started)** |
