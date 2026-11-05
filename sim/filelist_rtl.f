@@ -1,5 +1,5 @@
 # Parameterized SPI IP Core - RTL Filelist
-# Compile spi_pkg.sv FIRST, followed by submodules and top levels
+# Compile spi_pkg.sv FIRST, followed by submodules, top levels, and wrappers
 
 ../rtl/common/spi_pkg.sv
 ../rtl/master/spi_clock_gen.sv
@@ -15,3 +15,4 @@
 ../rtl/slave/spi_slave.sv
 ../rtl/slave/spi_slave_top.sv
 ../rtl/common/spi_pad_wrapper.sv
+../rtl/board/spi_pynq_z2_top.sv

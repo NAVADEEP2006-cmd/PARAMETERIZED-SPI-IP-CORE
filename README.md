@@ -167,19 +167,29 @@ $f_{sclk} = 4.167\text{ MHz}$, Latency = $104\text{ cycles}$ ($2.08\ \mu\text{s}
 
 The target hardware development board is the **TUL PYNQ-Z2**, featuring the **AMD Zynq-7020 SoC** (`xc7z020clg400-1`).
 
-- **Core Timing Budget:** 50.0 MHz synchronous clock period ($20.000\text{ ns}$), constrained in `constraints/pynq_z2/pynq_z2_timing.xdc`.
-- **Connector Assignment:** Pmod B (Header JB) provides external peripheral connections:
-  - `pad_cs_n[0]`: Pin 1 (`W14`)
-  - `pad_mosi`: Pin 2 (`Y14`)
-  - `pad_miso`: Pin 3 (`T11` with internal pull-up)
-  - `pad_sclk`: Pin 4 (`T10`)
-  - `pad_cs_n[1]`: Pin 7 (`V16`)
+- **Clock Architecture:**
+  - **PL Reference Clock:** 125.0 MHz single-ended clock on pin `H16` (Bank 35), sourced directly from the onboard Realtek RTL8211E-VL Gigabit Ethernet PHY (`U5`, pin 40 `CLK125`).
+  - **Demonstration Clocking:** The board demonstration wrapper (`spi_pynq_z2_top.sv`) clocks the core directly from this 125.0 MHz reference clock with `CLOCK_DIVIDER = 15`, producing a 4.167 MHz SPI serial clock. This satisfies signal integrity limits on unshielded Pmod headers (< 5 MHz).
+  - **Clock Management Reality:** **No MMCM or Clocking Wizard IP is instantiated** in this baseline RTL.
+  - **SoC Production Target:** In a complete Zynq PS+PL production design, a 50 MHz clock is supplied by the Processing System (`FCLK_CLK0`) via an AXI-SPI bridge.
+  - **Out-of-Context (OOC) Timing Budget:** 50.0 MHz synchronous clock period (20.000 ns) constrained on `clk` in `constraints/pynq_z2/pynq_z2_timing.xdc`.
+- **Bank & Connector Allocations:**
+  - **Bank 35 (3.3V):** `sysclk` (H16), `reset_btn` (D19, BTN0), `start_btn` (D20, BTN1), `sw_slave_sel[1:0]` (M20, M19).
+  - **Bank 34 (3.3V):** Pmod B (Header JB) and Status LEDs LD[3:0]:
+    - `pad_cs_n[0]`: Pin 1 (`W14`, JB1_P)
+    - `pad_mosi`: Pin 2 (`Y14`, JB1_N)
+    - `pad_miso`: Pin 3 (`T11`, JB2_P, with internal pull-up)
+    - `pad_sclk`: Pin 4 (`T10`, JB2_N)
+    - `pad_cs_n[1]`: Pin 7 (`V16`, JB3_P)
+    - `pad_cs_n[2]`: Pin 8 (`W16`, JB3_N)
+    - `pad_cs_n[3]`: Pin 9 (`V12`, JB4_P)
+    - `led_busy`: LD0 (`R14`), `led_done`: LD1 (`P14`), `led_error`: LD2 (`N16`), `led_active`: LD3 (`M14`)
 - **Candidate Hardware Peripherals:**
   - Bosch BMI160 6-Axis Inertial Measurement Unit (IMU)
   - Microchip 25LC256 256K SPI EEPROM
 
 > [!NOTE]
-> Hardware pin assignments are derived from official board schematics. Physical laboratory validation with attached peripheral hardware is treated as a proposed integration pending hands-on testing.
+> Physical hardware pin and bank assignments are verified against the authoritative TUL PYNQ-Z2 Schematic (Rev C). Laboratory bench validation with physical oscilloscope probing remains pending.
 
 ---
 
@@ -190,27 +200,35 @@ The design is verified using modular unit testbenches and an end-to-end integrat
 ```mermaid
 flowchart LR
     TB["Self-Checking Test Suite (tb/)"] --> UT["Unit Tests (tb/unit/)\nClock Gen, Bit Counter, CS Ctrl,\nShift Registers, Master FSM"]
-    TB --> IT["Integration Testbench (tb/integration/spi_tb.sv)\n16 Suites, 74 Automated Assertions"]
+    TB --> IT["Integration Testbench (tb/integration/spi_tb.sv)\n16 Suites, 58 Static Checks -> 74 Executed Checks"]
     IT --> PASS["100% Passing\n(Verilator, Icarus, XSim)"]
 ```
 
-### 16 Integration Verification Suites:
-1. **Reset & Idle Quiescent States:** SCLK idle polarity (Modes 0–3), CS_n idle high, busy/done quiescent levels.
-2. **SPI Mode 0:** Full-duplex loopback (`CPOL=0, CPHA=0`, 8-bit, MSB-first).
-3. **SPI Mode 1:** Full-duplex loopback (`CPOL=0, CPHA=1`, 8-bit, MSB-first).
-4. **SPI Mode 2:** Full-duplex loopback (`CPOL=1, CPHA=0`, 8-bit, MSB-first).
-5. **SPI Mode 3:** Full-duplex loopback (`CPOL=1, CPHA=1`, 8-bit, MSB-first).
-6. **Diagnostic Telemetry:** Verified measured latency ($104$ cycles), SCLK cycles ($96$ cycles), and `perf_clear`.
-7. **Error Detection:** Rejection on invalid slave select, separate firing of `error` and `select_error`, and rejection while busy.
-8. **Back-to-Back Streaming:** Continuous streaming transfers with start held high.
-9. **16-Bit Word Transfer:** Parameterized verification for $W=16$.
-10. **32-Bit Word Transfer:** Parameterized verification for $W=32$.
-11. **LSB-First Transfer:** Verified bit-reversal and transmission order (`LSB_FIRST=1`).
-12. **Multi-Slave CS Bus:** Verified independent 1-hot decoding across 4 chip-select lines (`NUM_SLAVES=4`).
-13. **Mid-Transfer Reset:** Verified immediate recovery to idle and deassertion of CS upon mid-transfer reset.
-14. **Single-Bit Word Boundary:** Verified corner case $W=1$ for `1'b1` and `1'b0`.
-15. **Clock Divider Minimum Boundary:** Verified exact timing boundary at $D=5$ (`MISO_SYNC_STAGES=1`).
-16. **Reset Lifecycle:** Quiescent state during reset assertion before transfer, clean start recovery, and reset after transfer.
+### Modular Unit Tests (`tb/unit/`):
+- `tb_spi_clock_gen.sv`: Verifies SCLK division, edge strobes, and idle states across CPOL modes.
+- `tb_spi_bit_counter.sv`: Verifies bit count tracking, rollover, and synchronous clear priority.
+- `tb_spi_cs_ctrl.sv`: Verifies registered 1-hot decoding and mutual exclusion across slaves.
+- `tb_spi_shift_regs.sv`: Verifies TX MSB/LSB serialization, preloading, and RX deserialization.
+- `tb_spi_master_fsm.sv`: Verifies 5-state Moore transaction sequencing and handshake signals.
+
+### 16 Integration Verification Suites (74 Dynamic Checks):
+The integration testbench defines 58 static `check_result` calls. Due to iteration loops in Test 8 (4 iterations) and Test 12 (17 assertions across 4 slaves), the simulation executes **74 automated assertions** at runtime:
+1. **Reset & Idle Quiescent States:** SCLK idle polarity (Modes 0–3), CS_n idle high, busy/done quiescent levels (7 checks).
+2. **SPI Mode 0:** Full-duplex loopback (`CPOL=0, CPHA=0`, 8-bit, MSB-first) (4 checks).
+3. **SPI Mode 1:** Full-duplex loopback (`CPOL=0, CPHA=1`, 8-bit, MSB-first) (2 checks).
+4. **SPI Mode 2:** Full-duplex loopback (`CPOL=1, CPHA=0`, 8-bit, MSB-first) (2 checks).
+5. **SPI Mode 3:** Full-duplex loopback (`CPOL=1, CPHA=1`, 8-bit, MSB-first) (2 checks).
+6. **Diagnostic Telemetry:** Verified measured latency (104 cycles), SCLK cycles (96 cycles), and `perf_clear` (5 checks).
+7. **Error Detection:** Rejection on invalid slave select, separate firing of `error` and `select_error`, and rejection while busy (5 checks).
+8. **Back-to-Back Streaming:** Continuous streaming transfers with start held high (4 checks in loop).
+9. **16-Bit Word Transfer:** Parameterized verification for W=16 (2 checks).
+10. **32-Bit Word Transfer:** Parameterized verification for W=32 (2 checks).
+11. **LSB-First Transfer:** Verified bit-reversal and transmission order (`LSB_FIRST=1`) (2 checks).
+12. **Multi-Slave CS Bus:** Verified independent 1-hot decoding across 4 chip-select lines (`NUM_SLAVES=4`) (17 checks).
+13. **Mid-Transfer Reset:** Verified immediate recovery to idle and deassertion of CS upon mid-transfer reset (5 checks).
+14. **Single-Bit Word Boundary:** Verified corner case W=1 for `1'b1` and `1'b0` (4 checks).
+15. **Clock Divider Minimum Boundary:** Verified exact timing boundary at D=5 (`MISO_SYNC_STAGES=1`) (3 checks).
+16. **Reset Lifecycle:** Quiescent state during reset assertion before transfer, clean start recovery, and reset after transfer (8 checks).
 
 ---
 
@@ -220,13 +238,13 @@ flowchart LR
 PARAMETERIZED-SPI-IP-CORE/
 ├── .github/
 │   └── workflows/
-│       └── spi-ci.yml                 # Automated CI workflow (lint, iverilog, verilator)
+│       └── spi-ci.yml                 # Automated CI workflow (lint, unit tests, integration)
 ├── .gitignore                         # Vivado, simulator, Python, and editor ignore rules
 ├── README.md                          # Project overview and engineering documentation
 ├── constraints/
 │   └── pynq_z2/
-│       ├── pynq_z2_pins.xdc           # Physical pin mappings for TUL PYNQ-Z2 board
-│       └── pynq_z2_timing.xdc         # 50 MHz core clock timing constraint
+│       ├── pynq_z2_pins.xdc           # Physical pin mappings for TUL PYNQ-Z2 board (Bank 34/35)
+│       └── pynq_z2_timing.xdc         # 50 MHz core clock OOC timing constraint
 ├── docs/
 │   ├── ARCHITECTURE.md                # System block diagrams and detailed microarchitecture
 │   ├── DESIGN_SPECIFICATION.md        # Signal tables, parameter specs, and timing equations
@@ -237,6 +255,8 @@ PARAMETERIZED-SPI-IP-CORE/
 ├── images/
 │   └── .gitkeep                       # Architectural diagrams and visual assets
 ├── rtl/
+│   ├── board/
+│   │   └── spi_pynq_z2_top.sv         # PYNQ-Z2 board demonstration wrapper
 │   ├── common/
 │   │   ├── spi_pad_wrapper.sv         # SoC integration wrapper (loopback / external pads)
 │   │   └── spi_pkg.sv                 # Package constants, width helpers, and mode functions
@@ -262,11 +282,11 @@ PARAMETERIZED-SPI-IP-CORE/
 │   └── vivado/
 │       └── run_vivado.tcl             # Reproducible AMD Vivado batch automation script
 ├── sim/
-│   ├── Makefile                       # Make automation for lint and simulation
+│   ├── Makefile                       # Make automation for lint, unit tests, and simulation
 │   ├── filelist_rtl.f                 # RTL compilation source manifest
 │   ├── filelist_tb.f                  # Testbench compilation manifest
 │   ├── run_sim.ps1                    # PowerShell testbench runner
-│   ├── run_sim.py                     # Cross-platform Python runner (lint, iverilog, verilator)
+│   ├── run_sim.py                     # Cross-platform Python runner (lint, unit tests, sim)
 │   └── sim_main.cpp                   # Verilator C++ testbench harness
 └── tb/
     ├── integration/
@@ -296,12 +316,17 @@ python sim/run_sim.py lint
 # or via Make
 make -C sim lint
 
-# 2. Run Icarus Verilog Simulation
-python sim/run_sim.py iverilog
+# 2. Run Modular Unit Tests
+python sim/run_sim.py unit
 # or via Make
-make -C sim sim-iverilog
+make -C sim unit
 
-# 3. Run Modern Verilator Simulation
+# 3. Run Complete Integration Simulation (Icarus Verilog)
+python sim/run_sim.py integration
+# or via Make
+make -C sim integration
+
+# 4. Run Modern Verilator Simulation
 python sim/run_sim.py sim
 # or via Make
 make -C sim sim
@@ -310,13 +335,13 @@ make -C sim sim
 ### Running AMD Vivado Automation Flow
 
 ```bash
-# RTL Elaboration & Design Analysis
-vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate -top spi_master_top
+# 1. Out-of-Context IP Core Flow (spi_master_top with 50 MHz timing budget)
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -top spi_master_top
 
-# Out-of-Context Synthesis & Implementation (Targeting PYNQ-Z2 Zynq-7020)
-vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7z020clg400-1
+# 2. Physical Board Demonstration Flow (spi_pynq_z2_top with PYNQ-Z2 pin constraints)
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_pynq_z2_top -part xc7z020clg400-1
 
-# AMD Vivado XSim Functional Simulation
+# 3. AMD Vivado XSim Functional Simulation
 vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode sim
 ```
 
@@ -329,7 +354,8 @@ vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode
 | Core SPI Master & Submodules | **Simulation Verified** |
 | SPI Slave Core & Tri-State Top | **Simulation Verified** |
 | Pad & Loopback Wrapper | **Simulation Verified** |
-| Modular Unit Testbenches | **Simulation Verified** |
+| Board Demonstration Top (`spi_pynq_z2_top.sv`) | **Implemented — Not Verified** |
+| Modular Unit Testbenches (5 tests) | **Simulation Verified** |
 | 16-Suite Integration Testbench (74 Assertions) | **Simulation Verified** |
 | PYNQ-Z2 Timing & Pin Constraints | **Implemented — Not Verified** |
 | Multi-Device Transaction Scheduler RTL | **Planned (Not Started)** |

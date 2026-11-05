@@ -81,10 +81,12 @@ module tb_spi_cs_ctrl;
       errors++;
     end
 
-    if (errors == 0)
+    if (errors == 0) begin
       $display("=== [tb_spi_cs_ctrl] ALL CHECKS PASSED ===");
-    else
+    end else begin
       $display("=== [tb_spi_cs_ctrl] FAILED with %0d errors ===", errors);
+      $fatal(1, "Unit test tb_spi_cs_ctrl failed");
+    end
 
     $finish;
   end

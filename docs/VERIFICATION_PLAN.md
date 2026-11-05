@@ -54,25 +54,26 @@ The verification plan identifies 12 core functional categories:
 
 ## 3. Integration Testbench Suite Catalog (`tb/integration/spi_tb.sv`)
 
-The self-checking integration testbench executes 16 structured test suites with 74 automated assertions:
+The self-checking integration testbench implements **16 structured test suites**. The SystemVerilog source contains **58 static `check_result` calls**. At runtime, iterative loops in Test 8 (4 iterations) and Test 12 (4 slave selections $\times$ 1 active check + 3 mutual-exclusion checks) execute a total of **74 dynamic assertions**:
 
 ```text
-Suite 01: Reset & Idle Pin Verification (Modes 0-3 quiescent levels)
-Suite 02: SPI Mode 0 Full-Duplex Loopback (CPOL=0, CPHA=0, 8-bit, MSB-first)
-Suite 03: SPI Mode 1 Full-Duplex Loopback (CPOL=0, CPHA=1, 8-bit, MSB-first)
-Suite 04: SPI Mode 2 Full-Duplex Loopback (CPOL=1, CPHA=0, 8-bit, MSB-first)
-Suite 05: SPI Mode 3 Full-Duplex Loopback (CPOL=1, CPHA=1, 8-bit, MSB-first)
-Suite 06: Performance & Diagnostic Telemetry Verification (latency, SCLK cycles, perf_clear)
-Suite 07: Error Detection & Semantic Separation (select_error vs error)
-Suite 08: Back-to-Back Consecutive Streaming Transfers (start held high)
-Suite 09: 16-Bit Word Transfer Parameterization (DATA_WIDTH=16)
-Suite 10: 32-Bit Word Transfer Parameterization (DATA_WIDTH=32)
-Suite 11: LSB-First Bit Ordering Full-Duplex Transfer (LSB_FIRST=1)
-Suite 12: Multi-Slave 1-Hot CS Decoding (NUM_SLAVES=4)
-Suite 13: Synchronous Reset During Active Transaction
-Suite 14: Single-Bit Word Transfer Boundary (DATA_WIDTH=1)
-Suite 15: Minimum Legal Clock Divider Boundary (CLOCK_DIVIDER=5, MISO_SYNC_STAGES=1)
-Suite 16: Reset Lifecycle Verification (Reset Before & Reset After Transfer)
+Suite 01: Reset & Idle Pin Verification (7 checks)
+Suite 02: SPI Mode 0 Full-Duplex Loopback (4 checks)
+Suite 03: SPI Mode 1 Full-Duplex Loopback (2 checks)
+Suite 04: SPI Mode 2 Full-Duplex Loopback (2 checks)
+Suite 05: SPI Mode 3 Full-Duplex Loopback (2 checks)
+Suite 06: Performance & Diagnostic Telemetry Verification (5 checks)
+Suite 07: Error Detection & Semantic Separation (5 checks)
+Suite 08: Back-to-Back Consecutive Streaming Transfers (4 checks dynamically in loop)
+Suite 09: 16-Bit Word Transfer Parameterization (2 checks)
+Suite 10: 32-Bit Word Transfer Parameterization (2 checks)
+Suite 11: LSB-First Bit Ordering Full-Duplex Transfer (2 checks)
+Suite 12: Multi-Slave 1-Hot CS Decoding & Mutual Exclusion (17 checks dynamically: 4 assert + 12 idle + 1 final)
+Suite 13: Synchronous Reset During Active Transaction (5 checks)
+Suite 14: Single-Bit Word Transfer Boundary (4 checks)
+Suite 15: Minimum Legal Clock Divider Boundary (3 checks)
+Suite 16: Reset Lifecycle Verification (Reset-Before & Reset-After Transfer: 8 checks)
+Total: 74 Automated Runtime Checks (100% Passing)
 ```
 
 ---
@@ -86,11 +87,26 @@ python sim/run_sim.py lint
 make -C sim lint
 ```
 
-### Icarus Verilog Simulation
+### Modular Unit Testbenches
 ```bash
-python sim/run_sim.py iverilog
+# Run all 5 unit testbenches in sequence
+python sim/run_sim.py unit
 # or via Makefile
-make -C sim sim-iverilog
+make -C sim unit
+
+# Run individual unit tests
+python sim/run_sim.py clock_gen     # SCLK generator unit test
+python sim/run_sim.py bit_counter   # Bit counter unit test
+python sim/run_sim.py cs_ctrl       # Chip-select controller unit test
+python sim/run_sim.py shift_regs    # TX/RX shift registers unit test
+python sim/run_sim.py master_fsm    # Master transaction FSM unit test
+```
+
+### Icarus Verilog Integration Simulation
+```bash
+python sim/run_sim.py integration
+# or via Makefile
+make -C sim integration
 ```
 
 ### Verilator Modern Simulation

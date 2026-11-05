@@ -221,3 +221,42 @@ flowchart TD
 
 > [!IMPORTANT]
 > The Multi-Device Transaction Scheduler is currently in the architectural specification phase. The synthesizable RTL arbiter and descriptor queues are planned extensions and are not included in the baseline RTL.
+
+
+---
+
+## 7. Board Demonstration Top & Integration Wrappers
+
+```mermaid
+flowchart TD
+    subgraph PYNQ_Z2_Top ["Physical Board Wrapper: spi_pynq_z2_top.sv"]
+        CLK_IN["sysclk (125 MHz from PHY H16)"]
+        BTN_IN["reset_btn (D19), start_btn (D20)"]
+        SW_IN["sw_slave_sel[1:0] (M20, M19)"]
+        SYNC["Synchronizers & Edge Detectors"]
+        DEMO_GEN["Demo Pattern Generator (tx_data += 1)"]
+        PULSE_EXT["LED Pulse Stretchers"]
+        LED_OUT["LEDs: busy, done, error, active"]
+    end
+
+    subgraph Core_Top ["Reusable IP: spi_master_top.sv"]
+        CORE["SPI Master Engine (CLOCK_DIVIDER=15)"]
+    end
+
+    subgraph Pmod_B ["Pmod B Header JB (Bank 34)"]
+        PAD_SPI["pad_sclk, pad_mosi, pad_miso, pad_cs_n[0..3]"]
+    end
+
+    CLK_IN --> SYNC
+    BTN_IN --> SYNC
+    SW_IN --> SYNC
+    SYNC --> DEMO_GEN
+    DEMO_GEN -->|start, tx_data, slave_select| CORE
+    CLK_IN --> CORE
+    CORE -->|busy, done, error, transfer_active| PULSE_EXT
+    PULSE_EXT --> LED_OUT
+    CORE --> PAD_SPI
+```
+
+1. **`spi_pad_wrapper.sv` (Simulation & Loopback):** Provides pad-level modeling, bidirectional tri-state MISO emulation, and self-testing loopback interconnect between master and an internal slave.
+2. **`spi_pynq_z2_top.sv` (Hardware Lab Demonstration):** Bridges physical PYNQ-Z2 board pins (125 MHz clock on H16, pushbuttons, switches, LEDs) to the reusable IP core without requiring an external AXI master or unconstrained bitstream synthesis.

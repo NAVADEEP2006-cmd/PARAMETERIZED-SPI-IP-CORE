@@ -82,10 +82,12 @@ module tb_spi_bit_counter;
       errors++;
     end
 
-    if (errors == 0)
+    if (errors == 0) begin
       $display("=== [tb_spi_bit_counter] ALL CHECKS PASSED ===");
-    else
+    end else begin
       $display("=== [tb_spi_bit_counter] FAILED with %0d errors ===", errors);
+      $fatal(1, "Unit test tb_spi_bit_counter failed");
+    end
 
     $finish;
   end

@@ -4,14 +4,21 @@
 # Target Platform:    TUL PYNQ-Z2 (AMD Zynq-7020 xc7z020clg400-1)
 # Supported execution modes:
 #   -mode elaborate : Perform non-device-specific RTL elaboration & design analysis
-#   -mode synth     : Synthesize IP core for the target FPGA part (OOC)
+#   -mode synth     : Synthesize IP core or board top for target FPGA part
 #   -mode impl      : Run complete flow: Synthesis -> opt -> place -> phys_opt -> route
 #   -mode sim       : Execute functional verification using AMD Vivado XSim
 #   -mode all       : Run implementation flow followed by XSim functional verification
 #
+# Target Configurations:
+#   1. Out-of-Context (OOC) IP Core Flow:
+#      -top spi_master_top  -xdc constraints/pynq_z2/pynq_z2_timing.xdc (50 MHz clk)
+#   2. Physical Board Demonstration Flow:
+#      -top spi_pynq_z2_top -xdc constraints/pynq_z2/pynq_z2_pins.xdc   (125 MHz sysclk + pins)
+#
 # Usage examples:
 #   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate
-#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7z020clg400-1
+#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -top spi_master_top
+#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_pynq_z2_top
 #   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode sim
 # ==============================================================================
 
@@ -26,7 +33,7 @@ set REPORTS_DIR "$REPO_DIR/reports/vivado"
 set MODE        "elaborate"
 set TOP         "spi_master_top"
 set PART        "xc7z020clg400-1"
-set CONSTRAINTS "$CONSTR_DIR/pynq_z2_timing.xdc"
+set CONSTRAINTS ""
 
 # Parse command line arguments
 for {set i 0} {$i < [llength $argv]} {incr i} {
@@ -43,6 +50,22 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
     }
 }
 
+# Determine default constraint file based on selected top module if not explicitly set
+if {$CONSTRAINTS eq ""} {
+    if {$TOP eq "spi_pynq_z2_top"} {
+        set CONSTRAINTS "$CONSTR_DIR/pynq_z2_pins.xdc"
+    } else {
+        set CONSTRAINTS "$CONSTR_DIR/pynq_z2_timing.xdc"
+    }
+}
+
+# Determine whether flow is Out-of-Context (OOC)
+# Reusable IP cores (spi_master_top, spi_pad_wrapper) run OOC; board top runs full board flow
+set IS_OOC 1
+if {$TOP eq "spi_pynq_z2_top"} {
+    set IS_OOC 0
+}
+
 file mkdir $REPORTS_DIR
 
 puts "=================================================================="
@@ -50,6 +73,8 @@ puts "  AMD Vivado IP Core Automation Flow"
 puts "  Repository Root : $REPO_DIR"
 puts "  Mode            : $MODE"
 puts "  Top Module      : $TOP"
+puts "  Flow Type       : [expr {$IS_OOC ? {Out-of-Context (OOC) IP Core} : {Board-Level Implementation}}]"
+puts "  Constraint File : $CONSTRAINTS"
 puts "  Target Part     : $PART (TUL PYNQ-Z2)"
 puts "=================================================================="
 
@@ -69,6 +94,7 @@ set RTL_SOURCES [list \
     "$RTL_DIR/slave/spi_slave.sv" \
     "$RTL_DIR/slave/spi_slave_top.sv" \
     "$RTL_DIR/common/spi_pad_wrapper.sv" \
+    "$RTL_DIR/board/spi_pynq_z2_top.sv" \
 ]
 
 proc read_all_rtl {} {
@@ -171,7 +197,13 @@ if {$MODE eq "synth"} {
         puts "\[WARNING\] Constraint file not found: $CONSTRAINTS. Proceeding without timing constraints."
     }
     
-    synth_design -top $TOP -part $PART -mode out_of_context
+    if {$IS_OOC} {
+        puts "--- Running synth_design (Out-of-Context) ---"
+        synth_design -top $TOP -part $PART -mode out_of_context
+    } else {
+        puts "--- Running synth_design (Full Board) ---"
+        synth_design -top $TOP -part $PART
+    }
     
     report_utilization -file "$REPORTS_DIR/synthesis_utilization.rpt"
     report_timing_summary -file "$REPORTS_DIR/synthesis_timing.rpt"
@@ -183,7 +215,7 @@ if {$MODE eq "synth"} {
 # ------------------------------------------------------------------------------
 if {$MODE eq "impl" || $MODE eq "all"} {
     puts "\n=================================================================="
-    puts "  Stage: Out-of-Context Logic Synthesis ($TOP) on $PART"
+    puts "  Stage: Logic Synthesis ($TOP) on $PART"
     puts "=================================================================="
     if {$PART eq ""} {
         error "ERROR: FPGA target part must be specified via '-part <part>' for implementation."
@@ -198,8 +230,13 @@ if {$MODE eq "impl" || $MODE eq "all"} {
         puts "\[WARNING\] Constraint file not found: $CONSTRAINTS. Proceeding without timing constraints."
     }
     
-    puts "--- Running synth_design (out-of-context) ---"
-    synth_design -top $TOP -part $PART -mode out_of_context
+    if {$IS_OOC} {
+        puts "--- Running synth_design (Out-of-Context) ---"
+        synth_design -top $TOP -part $PART -mode out_of_context
+    } else {
+        puts "--- Running synth_design (Full Board) ---"
+        synth_design -top $TOP -part $PART
+    }
     
     report_utilization -file "$REPORTS_DIR/synthesis_utilization.rpt"
     report_timing_summary -file "$REPORTS_DIR/synthesis_timing.rpt"
