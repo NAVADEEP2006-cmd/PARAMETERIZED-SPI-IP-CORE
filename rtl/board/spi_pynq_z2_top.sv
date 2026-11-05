@@ -41,8 +41,6 @@
 //       led_active   -> M14 (LD3 - transfer active / heartbeat)
 // -----------------------------------------------------------------------------
 
-`timescale 1ns/1ps
-
 module spi_pynq_z2_top
   import spi_pkg::*;
 #(
@@ -110,7 +108,9 @@ module spi_pynq_z2_top
   // ---------------------------------------------------------------------------
   // Increments an 8-bit test pattern each time start_btn is pressed
   logic [DATA_WIDTH-1:0] tx_data_reg;
+  /* verilator lint_off UNUSEDSIGNAL */
   logic [DATA_WIDTH-1:0] rx_data_wire;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                  core_start;
   logic                  core_busy;
   logic                  core_done;

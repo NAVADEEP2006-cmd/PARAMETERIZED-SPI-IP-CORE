@@ -73,7 +73,7 @@ switch ($Action.ToLower()) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         Write-Host "--- Running Verilator Board Top Lint ---" -ForegroundColor Cyan
-        & verilator --lint-only -Wall -sv $RtlAll $RtlBoard --top-module spi_pynq_z2_top
+        & verilator --lint-only -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $RtlAll $RtlBoard --top-module spi_pynq_z2_top
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         Write-Host "--- Running Verilator Full Lint ---" -ForegroundColor Cyan

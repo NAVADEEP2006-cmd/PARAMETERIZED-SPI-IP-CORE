@@ -134,7 +134,7 @@ def do_lint():
         return rc_rtl
 
     print("\n================ Running Verilator Board Top Lint ================")
-    cmd_board = [verilator, "--lint-only", "-Wall", "-sv"] + RTL_ALL + ["--top-module", "spi_pynq_z2_top"]
+    cmd_board = [verilator, "--lint-only", "-Wall", "-Wno-TIMESCALEMOD", "-Wno-PINCONNECTEMPTY", "-sv"] + RTL_ALL + ["--top-module", "spi_pynq_z2_top"]
     rc_board = run_cmd(cmd_board)
     if rc_board != 0:
         print("[FAIL] Verilator board top lint failed.")

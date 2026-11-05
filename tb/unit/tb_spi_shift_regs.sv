@@ -51,13 +51,13 @@ module tb_spi_shift_regs;
 
   initial begin
     #(CLK_PERIOD * 2);
-    @(posedge clk);
+    @(posedge clk); #1;
     reset <= 0;
-    @(posedge clk);
+    @(posedge clk); #1;
 
     // Load 8'hA5 (10100101) into TX
     tx_load <= 1;
-    @(posedge clk);
+    @(posedge clk); #1;
     tx_load <= 0;
 
     // First bit (MSB = 1) is immediately preloaded on MOSI
@@ -69,16 +69,16 @@ module tb_spi_shift_regs;
     // Shift through RX
     for (int i = 0; i < DATA_WIDTH; i++) begin
       rx_shift <= 1;
-      @(posedge clk);
+      @(posedge clk); #1;
       rx_shift <= 0;
       if (i < DATA_WIDTH - 1) begin
         tx_shift <= 1;
-        @(posedge clk);
+        @(posedge clk); #1;
         tx_shift <= 0;
       end
     end
 
-    @(posedge clk);
+    @(posedge clk); #1;
     if (rx_data !== 8'hA5) begin
       $display("[FAIL] RX received data mismatch: expected 0xA5, got 0x%02X", rx_data);
       errors++;

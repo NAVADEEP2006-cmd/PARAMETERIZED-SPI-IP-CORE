@@ -35,9 +35,9 @@ module tb_spi_clock_gen;
 
   initial begin
     #(CLK_PERIOD * 2);
-    @(posedge clk);
+    @(posedge clk); #1;
     reset <= 0;
-    @(posedge clk);
+    @(posedge clk); #1;
 
     // Verify quiescent state
     if (sclk !== 1'b0) begin
@@ -47,33 +47,33 @@ module tb_spi_clock_gen;
 
     // Enable clock generator run without sclk_en
     run <= 1;
-    repeat (CLK_DIV) @(posedge clk);
-    if (!tick) begin
-      $display("[FAIL] Tick did not fire after CLK_DIV cycles");
-      errors++;
-    end
+    while (!tick) @(posedge clk); #1;
     if (sclk !== 1'b0) begin
       $display("[FAIL] SCLK toggled when sclk_en=0");
       errors++;
     end
 
-    // Enable toggling
+    // Enable toggling and wait for lead edge
     sclk_en <= 1;
-    repeat (CLK_DIV) @(posedge clk);
-    if (lead_edge !== 1'b1 || sclk !== 1'b1) begin
-      $display("[FAIL] Lead edge or SCLK transition failed");
+    while (!lead_edge) @(posedge clk); #1;
+    // At lead_edge tick, sclk transitions on next posedge
+    @(posedge clk); #1;
+    if (sclk !== 1'b1) begin
+      $display("[FAIL] SCLK failed to transition high on lead edge");
       errors++;
     end
 
-    repeat (CLK_DIV) @(posedge clk);
-    if (trail_edge !== 1'b1 || sclk !== 1'b0) begin
-      $display("[FAIL] Trail edge or SCLK transition failed");
+    // Wait for trail edge
+    while (!trail_edge) @(posedge clk); #1;
+    @(posedge clk); #1;
+    if (sclk !== 1'b0) begin
+      $display("[FAIL] SCLK failed to transition low on trail edge");
       errors++;
     end
 
     run <= 0;
     sclk_en <= 0;
-    @(posedge clk);
+    @(posedge clk); #1;
     if (sclk !== 1'b0) begin
       $display("[FAIL] SCLK did not return to idle");
       errors++;

@@ -36,9 +36,9 @@ module tb_spi_master_fsm;
 
   initial begin
     #(CLK_PERIOD * 2);
-    @(posedge clk);
+    @(posedge clk); #1;
     reset <= 0;
-    @(posedge clk);
+    @(posedge clk); #1;
 
     // Initial state: S_IDLE
     if (busy !== 1'b0 || done !== 1'b0 || cs_active !== 1'b0) begin
@@ -54,7 +54,7 @@ module tb_spi_master_fsm;
       errors++;
     end
 
-    @(posedge clk);
+    @(posedge clk); #1;
     start_req <= 0;
     // Now in S_SELECT
     if (busy !== 1'b1 || cs_active !== 1'b1 || sclk_en !== 1'b0) begin
@@ -62,7 +62,7 @@ module tb_spi_master_fsm;
       errors++;
     end
 
-    @(posedge clk);
+    @(posedge clk); #1;
     // Now in S_TRANSFER
     if (busy !== 1'b1 || cs_active !== 1'b1 || run !== 1'b1 || sclk_en !== 1'b1) begin
       $display("[FAIL] S_TRANSFER outputs incorrect");
@@ -71,7 +71,7 @@ module tb_spi_master_fsm;
 
     // Signal transfer completion
     xfer_last <= 1;
-    @(posedge clk);
+    @(posedge clk); #1;
     xfer_last <= 0;
     // Now in S_DESELECT
     if (busy !== 1'b1 || sclk_en !== 1'b0 || run !== 1'b1) begin
@@ -87,7 +87,7 @@ module tb_spi_master_fsm;
       errors++;
     end
 
-    @(posedge clk);
+    @(posedge clk); #1;
     tick <= 0;
     // Now in S_DONE
     if (done !== 1'b1 || busy !== 1'b0 || cs_active !== 1'b0 || tx_clear !== 1'b1) begin
@@ -96,7 +96,7 @@ module tb_spi_master_fsm;
       errors++;
     end
 
-    @(posedge clk);
+    @(posedge clk); #1;
     // Return to S_IDLE
     if (done !== 1'b0 || busy !== 1'b0) begin
       $display("[FAIL] Return to S_IDLE failed");

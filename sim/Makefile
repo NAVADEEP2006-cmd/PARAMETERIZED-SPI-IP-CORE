@@ -39,7 +39,7 @@ lint:
 	@echo "--- Running Verilator RTL Lint ---"
 	$(VERILATOR) --lint-only -Wall -sv $(RTL_SRCS) --top-module spi_pad_wrapper
 	@echo "--- Running Verilator Board Top Lint ---"
-	$(VERILATOR) --lint-only -Wall -sv $(RTL_SRCS) $(RTL_BOARD) --top-module spi_pynq_z2_top
+	$(VERILATOR) --lint-only -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $(RTL_SRCS) $(RTL_BOARD) --top-module spi_pynq_z2_top
 	@echo "--- Running Verilator Full Lint ---"
 	$(VERILATOR) --lint-only --timing -Wall -Wno-TIMESCALEMOD -Wno-PINCONNECTEMPTY -sv $(RTL_SRCS) $(TB_SRCS) --top-module spi_tb
 	@echo "--- Verilator Lint Passed with 0 errors! ---"

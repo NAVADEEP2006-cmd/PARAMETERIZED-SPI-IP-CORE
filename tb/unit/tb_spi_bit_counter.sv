@@ -33,9 +33,9 @@ module tb_spi_bit_counter;
 
   initial begin
     #(CLK_PERIOD * 2);
-    @(posedge clk);
+    @(posedge clk); #1;
     reset <= 0;
-    @(posedge clk);
+    @(posedge clk); #1;
 
     if (count !== 0 || last !== 0) begin
       $display("[FAIL] Initial reset failed");
@@ -45,9 +45,9 @@ module tb_spi_bit_counter;
     // Count 7 bits
     for (int i = 0; i < 7; i++) begin
       inc <= 1;
-      @(posedge clk);
+      @(posedge clk); #1;
       inc <= 0;
-      @(posedge clk);
+      @(posedge clk); #1;
       if (count !== (i + 1)) begin
         $display("[FAIL] Expected count %0d, got %0d", i + 1, count);
         errors++;
@@ -62,9 +62,9 @@ module tb_spi_bit_counter;
 
     // Rollover on 8th inc
     inc <= 1;
-    @(posedge clk);
+    @(posedge clk); #1;
     inc <= 0;
-    @(posedge clk);
+    @(posedge clk); #1;
     if (count !== 0 || last !== 0) begin
       $display("[FAIL] Rollover failed: count=%0d, last=%0d", count, last);
       errors++;
@@ -73,10 +73,10 @@ module tb_spi_bit_counter;
     // Test synchronous clear priority
     inc <= 1;
     clear <= 1;
-    @(posedge clk);
+    @(posedge clk); #1;
     clear <= 0;
     inc <= 0;
-    @(posedge clk);
+    @(posedge clk); #1;
     if (count !== 0) begin
       $display("[FAIL] Clear priority failed: count=%0d", count);
       errors++;
