@@ -1,8 +1,29 @@
-# Build and Simulation Artifacts
+# ==============================================================================
+# .gitignore - AMD Vivado, Hardware Simulation & Development Artifacts
+# ==============================================================================
+
+# Vivado project, runs and temporary artifacts
+.Xil/
+.cache/
+.runs/
+.gen/
+.ip_user_files/
+.sim/
+xsim.dir/
+*.jou
+*.log
+*.pb
+*.str
+*.dcp
+*.wdb
+clockInfo.txt
+vivado*.str
+vivado*.jou
+vivado*.log
+
+# Simulation builds & waveforms
 obj_dir/
 sim/xsim_build/
-.Xil/
-xsim.dir/
 *.o
 *.a
 *.exe
@@ -13,25 +34,23 @@ xsim.dir/
 transcript
 work/
 modelsim.ini
-*.log
-*.dmp
-*.jou
-*.pb
-*.str
-*.dcp
-*.wdb
-clockInfo.txt
 
-# Python
+# Generated reports & build output (re-generate using scripts/vivado/run_vivado.tcl)
+reports/
+build/
+dist/
+
+# Python cache and testing
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
 
-# OS / Editor
+# Operating System & IDE artifacts
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 *.swp
 *~
+*.bak

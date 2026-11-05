@@ -1,225 +1,413 @@
-# Parameterized Synthesizable SystemVerilog SPI IP Core
+# Parameterized SPI IP Core with Multi-Device Transaction Scheduling and SystemVerilog Verification
 
-A modular, parameterized, and fully synthesizable **SystemVerilog SPI IP Core** engineered for academic VLSI projects, FPGA/ASIC integration, and portfolio demonstration.
+## 1. Project Introduction
 
----
+The **Parameterized SPI IP Core** is a modular, technology-independent digital IP core written in synthesizable SystemVerilog. Serial Peripheral Interface (SPI) is an industry-standard, synchronous, full-duplex communication protocol widely utilized across embedded computing, digital signal processing, and FPGA systems to connect host processors with sensors, memories, data converters, and peripheral controllers.
 
-## Key Features
-
-- **Full-Duplex Communication:** Complete protocol support for all 4 SPI Modes:
-  - **Mode 0:** `CPOL=0, CPHA=0` (Idle low, sample leading/rising, shift trailing/falling)
-  - **Mode 1:** `CPOL=0, CPHA=1` (Idle low, shift leading/rising, sample trailing/falling)
-  - **Mode 2:** `CPOL=1, CPHA=0` (Idle high, sample leading/falling, shift trailing/rising)
-  - **Mode 3:** `CPOL=1, CPHA=1` (Idle high, shift leading/falling, sample trailing/rising)
-- **Parameterized Architecture:**
-  - `DATA_WIDTH`: Word width $\ge 1$ bit (verified for 8-bit, 16-bit, and 32-bit transfers).
-  - `CLOCK_DIVIDER`: Configurable half-period divider ($f_{sclk} = f_{clk} / (2D)$), enforcing synchronizer safety constraint $D \ge \text{spi\_min\_divider}$.
-  - `NUM_SLAVES`: Multi-slave chip-select bus width $\ge 1$ (verified for 1, 2, and 4 slaves with 1-hot mutual exclusion).
-  - `LSB_FIRST`: Selectable bit order (`0` = MSB-first, `1` = LSB-first) across master and slave shift paths.
-  - `MISO_SYNC_STAGES` & `SLAVE_SYNC_STAGES`: Parameterized flip-flop synchronizers for safe clock-domain crossing and oversampling.
-- **Robust Handshake & Error Semantics:**
-  - **`busy` / `done` Contract:** `busy` is asserted during active transaction states (`S_SELECT`, `S_TRANSFER`, `S_DESELECT`) and deasserts to `0` during the `S_DONE` pulse cycle.
-  - **`done` Pulse:** 1-clock completion pulse; `rx_data` is held stable from the `done` cycle until the next transaction.
-  - **Independent Error Flags:** `error` pulses when any transaction request is rejected; `select_error` pulses specifically when rejected due to an invalid slave address (`slave_select >= NUM_SLAVES`).
-- **Deterministic CS Timing:**
-  - Registered active-low chip select outputs prevent glitches.
-  - CS asserts 1 cycle after start is accepted, remains asserted through transfer and done, and deasserts as the core returns to idle (total duration $2WD + D + 1$ cycles).
-- **Physical Pad & Loopback Wrapper (`spi_pad_wrapper.sv`):**
-  - **`LOOPBACK_MODE = 1`:** Routes master SPI signals to an internal slave (slave index 0) for loopback verification.
-  - **`LOOPBACK_MODE = 0`:** Direct external chip pad mode. The internal slave is **not instantiated**, and `pad_miso` is placed in high-impedance (`1'bz`) to eliminate bus contention.
-- **Diagnostic / Performance Hardware Counters (`spi_perf_counters.sv`):**
-  - 32-bit non-intrusive counters measuring transaction count, total bits, busy cycles, total window cycles, exact transaction latency ($2WD + D + 2$), SCLK active cycles ($2WD$), and rejected start attempts.
-- **CI / Simulation Automation:**
-  - Automated GitHub Actions workflow with independent jobs for Verilator lint, Icarus Verilog simulation, and Verilator simulation with explicit failure propagation.
+This project provides a clean, parameterizable hardware baseline capable of operating across all 4 standard SPI modes, supporting arbitrary word widths (verified for 1, 8, 16, and 32 bits), configurable clock division, glitch-free multi-peripheral chip selection, and non-intrusive diagnostic telemetry. The repository is structured to serve as an authoritative, reproducible foundation for academic digital design, FPGA prototyping on the **TUL PYNQ-Z2** (AMD Zynq-7020) development board, and future exploration of an autonomous **Multi-Device Transaction Scheduler**.
 
 ---
 
-## Directory Structure
+## 2. Problem Statement
+
+Standard vendor-provided SPI IP cores (such as AXI Quad SPI) often introduce considerable overhead, requiring full AXI4/AXI4-Lite interconnect infrastructure and vendor-specific tool dependencies. Conversely, basic open-source SPI implementations are frequently hardcoded to fixed word widths (e.g., 8-bit only), fixed clock polarities (Mode 0), and single-slave connections. Many naive designs inadvertently introduce clock-domain crossing hazards by routing the serial clock ($SCLK$) directly into asynchronous register clocks, or suffer from output glitches on chip-select signals.
+
+Furthermore, in multi-peripheral environments where an FPGA must simultaneously communicate with heterogeneous devices (e.g., high-rate motion sensors operating at Mode 3 alongside non-volatile EEPROMs operating at Mode 0), traditional controllers force the host software to perform tedious manual arbitration and polling.
+
+To address these challenges, this project engineers a vendor-agnostic, fully synchronous IP core with parameterized data paths, deterministic cycle timing, registered glitch-free control outputs, and an architectural roadmap toward autonomous multi-device transaction scheduling.
+
+---
+
+## 3. Project Objectives
+
+1. **Synthesizable Core RTL:** Design modular SystemVerilog modules for Master and Slave operations conforming to standard SPI specifications.
+2. **Comprehensive Parameterization:** Enable compile-time parameterization of data word width ($W \ge 1$), clock division ($D$), SPI modes ($0, 1, 2, 3$), bit ordering (MSB/LSB-first), and peripheral count ($N \ge 1$).
+3. **Synchronous Single-Clock Design:** Eliminate gated or derived clock hazards by operating purely in synchronous domains with oversampling synchronizers on external inputs.
+4. **Glitch-Free Multi-Peripheral Control:** Implement registered active-low chip-select decoding with 1-hot mutual exclusion.
+5. **Deterministic Verification:** Provide self-checking unit and integration testbenches with automated assertions covering reset behavior, protocol corner cases, and streaming transfers.
+6. **Hardware Target Alignment:** Define authoritative constraints and hardware integration documentation targeting the TUL PYNQ-Z2 (AMD Zynq-7020) FPGA platform.
+7. **Architectural Specification of Scheduler:** Establish a formal design specification for an autonomous multi-device scheduler subsystem.
+
+---
+
+## 4. SPI Protocol Fundamentals
+
+SPI is a synchronous, four-wire serial communication interface operating in full duplex:
+- **`SCLK` (Serial Clock):** Generated by the Master to synchronize data movement.
+- **`MOSI` (Master Out Slave In):** Serial data transmitted from Master to Slave.
+- **`MISO` (Master In Slave Out):** Serial data transmitted from Slave to Master.
+- **`CS_n` (Chip Select, Active-Low):** Individual peripheral select signal asserted low by the Master during an active frame.
 
 ```text
-spi_ip/
-├── rtl/
-│   ├── spi_pkg.sv             # Mode decode, width helpers, and closed-form performance functions
-│   ├── spi_clock_gen.sv       # SCLK generator and half-period tick strobes
-│   ├── spi_bit_counter.sv     # Word bit counter and frame completion flag
-│   ├── spi_tx_shift.sv        # Transmit shift register (MSB/LSB-first, registered output)
-│   ├── spi_rx_shift.sv        # Receive shift register (MSB/LSB-first, safe single-bit handling)
-│   ├── spi_cs_ctrl.sv         # Active-low chip-select decoder with registered outputs
-│   ├── spi_master_fsm.sv      # Master transaction sequencing FSM (5 states)
-│   ├── spi_perf_counters.sv   # Diagnostic and performance measurement telemetry counters
-│   ├── spi_master.sv          # Complete SPI master controller
-│   ├── spi_master_top.sv      # Master IP top-level with diagnostic telemetry hooks
-│   ├── spi_top.sv             # Backward-compatibility alias wrapping spi_master_top
-│   ├── spi_slave.sv           # Fully synchronous SPI slave with synchronizers and edge detection
-│   ├── spi_slave_top.sv       # Slave IP top-level with tri-state MISO buffer
-│   └── spi_pad_wrapper.sv     # SoC integration wrapper (loopback / external pad modes)
-│
-├── tb/
-│   └── spi_tb.sv              # Comprehensive self-checking verification testbench (11 test suites)
-│
-├── sim/
-│   ├── Makefile               # Simulation and lint automation
-│   ├── sim_main.cpp           # Verilator C++ testbench harness
-│   ├── run_sim.py             # Cross-platform simulation and lint script
-│   ├── run_sim.ps1            # Windows PowerShell runner
-│   ├── filelist_rtl.f         # RTL source filelist
-│   └── filelist_tb.f          # Testbench filelist
-│
-├── docs/
-│   ├── architecture.md        # Detailed block diagrams, state machine, and design decisions
-│   ├── interface_spec.md      # Pin contracts, signal timing, and usage guide
-│   └── register_parameter_spec.md # Parameters reference and closed-form timing formulas
-│
-├── .github/workflows/
-│   └── spi-ci.yml             # GitHub Actions CI workflow (lint, iverilog, verilator)
-│
-└── README.md                  # Project overview and documentation
+       Master Core                                   Slave Peripheral
+ +---------------------+                       +--------------------------+
+ |                     | ------ sclk --------> |                          |
+ |                     | ------ mosi --------> |                          |
+ |                     | <----- miso --------- |                          |
+ |                     | ---- cs_n[0] -------> |                          |
+ +---------------------+                       +--------------------------+
+```
+
+### Protocol Modes & Clock Timing
+
+The timing relationship between clock edges and data sampling is parameterized by Clock Polarity (`CPOL`) and Clock Phase (`CPHA`):
+
+$$\text{SPI\_MODE} = \{\text{CPOL}, \text{CPHA}\}$$
+
+| Mode | CPOL | CPHA | Clock Idle State | Leading SCLK Edge | Trailing SCLK Edge | Data Sampling Edge | Data Shift / Launch Edge |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **0** | 0 | 0 | Low (`1'b0`) | Rising | Falling | Leading (Rising) | Trailing (Falling) |
+| **1** | 0 | 1 | Low (`1'b0`) | Rising | Falling | Trailing (Falling) | Leading (Rising) |
+| **2** | 1 | 0 | High (`1'b1`) | Falling | Rising | Leading (Falling) | Trailing (Rising) |
+| **3** | 1 | 1 | High (`1'b1`) | Falling | Rising | Trailing (Rising) | Leading (Falling) |
+
+- **CPHA = 0:** Data must be stable on the bus *prior* to the leading clock edge. The first bit is preloaded directly onto the output register when the transaction begins.
+- **CPHA = 1:** Data is launched by the leading clock edge and captured on the trailing clock edge.
+
+---
+
+## 5. System Architecture
+
+The project cleanly separates implemented core features from planned advanced subsystems:
+
+```mermaid
+flowchart TD
+    subgraph Implemented_Baseline ["Implemented Baseline Core (Synthesizable RTL)"]
+        direction TB
+        MST["SPI Master Controller (spi_master.sv)"]
+        FSM["5-State Transaction FSM (spi_master_fsm.sv)"]
+        CLK["Clock Divider & Edge Gen (spi_clock_gen.sv)"]
+        TX["TX Shift Register (spi_tx_shift.sv)"]
+        RX["RX Shift Register (spi_rx_shift.sv)"]
+        CS["Chip Select Decoder (spi_cs_ctrl.sv)"]
+        PERF["Diagnostic Telemetry Counters (spi_perf_counters.sv)"]
+        SLV["Synchronous SPI Slave (spi_slave.sv)"]
+        PAD["Pad & Loopback Wrapper (spi_pad_wrapper.sv)"]
+    end
+
+    subgraph Planned_Subsystem ["Planned Extension (Under Specification)"]
+        SCHED["Multi-Device Transaction Scheduler (rtl/scheduler/)"]
+        Q["Descriptor Request Queue"]
+        ARB["Priority / Round-Robin Arbiter"]
+        RES["Result / Telemetry FIFO"]
+    end
+
+    SCHED -.->|Dispatches Transactions| MST
 ```
 
 ---
 
-## Parameters Reference
+## 6. RTL Architecture & Design Blocks
 
-| Parameter | Default | Valid Range | Scope | Description |
-|---|---|---|---|---|
-| `DATA_WIDTH` | 8 | $\ge 1$ (1, 8, 16, 32 verified) | Core | Number of bits per transaction. |
-| `CLOCK_DIVIDER` | 6 | $\ge \text{spi\_min\_divider}$ ($\ge 6$ for 2 sync stages) | Master | Half-period divider: $f_{sclk} = f_{clk} / (2D)$. Enforces synchronizer latency constraint. |
-| `SPI_MODE` | 0 | 0, 1, 2, 3 | Core | SPI mode $\{CPOL, CPHA\}$. |
-| `NUM_SLAVES` | 1 | $\ge 1$ (1, 2, 4 verified) | Master | Number of chip select lines on `cs_n`. |
-| `MISO_SYNC_STAGES` | 2 | $\ge 1$ | Master | Flop stages for synchronizing incoming MISO. |
-| `SLAVE_SYNC_STAGES`| 2 | $\ge 2$ | Slave | Flop stages for synchronizing SCLK, CS_N, MOSI. |
-| `LSB_FIRST` | 0 | 0, 1 | Core | `0` = MSB-first, `1` = LSB-first. |
-| `ENABLE_PERF` | 1 | 0, 1 | Master | `1` = instantiate telemetry counters; `0` = zero area. |
-| `LOOPBACK_MODE` | 1 | 0, 1 | Wrapper | `1` = loopback to slave 0; `0` = external pads (high-Z). |
+The core RTL is modularized into distinct, single-purpose components:
+
+| Module | Source File | Implemented Function |
+|---|---|---|
+| `spi_pkg` | `rtl/common/spi_pkg.sv` | Package constants, bit-width calculations (`clog2_safe`), mode decoding functions, and closed-form performance equations. |
+| `spi_clock_gen` | `rtl/master/spi_clock_gen.sv` | Modulo-$D$ counter generating the registered `sclk` signal, half-period `tick` strobes, `lead_edge`, and `trail_edge` pulses. |
+| `spi_bit_counter` | `rtl/master/spi_bit_counter.sv` | Frame bit tracker counting from $0$ to $W-1$, asserting `last` on the final bit period with synchronous clear priority. |
+| `spi_tx_shift` | `rtl/master/spi_tx_shift.sv` | Glitch-free registered serializer supporting MSB-first, LSB-first, and CPHA preloading. |
+| `spi_rx_shift` | `rtl/master/spi_rx_shift.sv` | Deserializer shifting incoming synchronized MISO bits; supports single-bit ($W=1$) and multi-bit frames. |
+| `spi_cs_ctrl` | `rtl/master/spi_cs_ctrl.sv` | Binary slave decoder driving active-low registered `cs_n` outputs with 1-hot mutual exclusion. |
+| `spi_master_fsm` | `rtl/master/spi_master_fsm.sv` | 5-state Moore transaction engine (`S_IDLE`, `S_SELECT`, `S_TRANSFER`, `S_DESELECT`, `S_DONE`). |
+| `spi_perf_counters` | `rtl/master/spi_perf_counters.sv` | Non-intrusive 32-bit hardware diagnostic telemetry counters for latency and throughput measurement. |
+| `spi_master` | `rtl/master/spi_master.sv` | Core SPI Master controller integrating FSM, clock generator, shift registers, and CS logic. |
+| `spi_master_top` | `rtl/master/spi_master_top.sv` | Master IP core top-level including telemetry counter hooks. |
+| `spi_top` | `rtl/master/spi_top.sv` | Backward-compatibility alias pass-through module. |
+| `spi_slave` | `rtl/slave/spi_slave.sv` | Synchronous SPI slave oversampling asynchronous SPI inputs via multi-stage flip-flops; includes frame error detection. |
+| `spi_slave_top` | `rtl/slave/spi_slave_top.sv` | Slave IP wrapper with tri-state `pad_miso` buffer. |
+| `spi_pad_wrapper` | `rtl/common/spi_pad_wrapper.sv` | SoC integration wrapper supporting internal loopback verification (`LOOPBACK_MODE=1`) or external pads (`LOOPBACK_MODE=0`). |
+| `spi_scheduler` | `rtl/scheduler/` | **Planned Subsystem:** Multi-device transaction arbiter and descriptor queue (see `rtl/scheduler/README.md`). |
 
 ---
 
-## Timing & Performance Formulas
+## 7. Configuration Parameters
+
+Compile-time parameters allow tailoring the IP core to specific system requirements:
+
+| Parameter | Default | Valid Range | Scope | Purpose |
+|---|:---:|:---:|:---:|---|
+| `DATA_WIDTH` ($W$) | 8 | $\ge 1$ | Master & Slave | Word width in bits (verified for 1, 8, 16, and 32 bits). |
+| `CLOCK_DIVIDER` ($D$) | 6 | $\ge \text{spi\_min\_divider}$ | Master & Top | Half-period divider: $f_{sclk} = f_{clk} / (2D)$. Enforces loopback synchronizer margin ($D \ge 6$ for 2 sync stages). |
+| `SPI_MODE` | 0 | 0, 1, 2, 3 | Master & Slave | Encodes $\{CPOL, CPHA\}$. |
+| `NUM_SLAVES` | 1 | $\ge 1$ | Master & Top | Number of independent chip-select lines on the `cs_n` bus. |
+| `MISO_SYNC_STAGES` | 2 | $\ge 1$ | Master | Flip-flop synchronizer stages on incoming `miso` line. |
+| `SLAVE_SYNC_STAGES`| 2 | $\ge 2$ | Slave | Flip-flop synchronizer stages on incoming `sclk`, `cs_n`, and `mosi`. |
+| `LSB_FIRST` | 0 | 0, 1 | Master & Slave | `0` = MSB-first (bit $[W-1]$ first); `1` = LSB-first (bit $[0]$ first). |
+| `ENABLE_PERF` | 1 | 0, 1 | Master & Top | `1` = instantiate 32-bit telemetry counters; `0` = tie outputs to 0 (zero area). |
+| `LOOPBACK_MODE` | 1 | 0, 1 | Pad Wrapper | `1` = route to internal slave 0; `0` = pure external pads (`pad_miso` high-Z). |
+
+> [!NOTE]
+> **Compile-Time vs. Planned Scheduler Runtime Configuration:**
+> In the current synthesizable baseline core, `SPI_MODE` and `CLOCK_DIVIDER` are compile-time static parameters applied uniformly across transactions. The planned autonomous Multi-Device Scheduler subsystem (`rtl/scheduler/`) is architected to extend this baseline with per-device runtime configuration descriptors, enabling dynamic per-transaction clock divider and mode switching across heterogeneous slave devices.
+
+---
+
+## 8. Timing Breakdown & Closed-Form Equations
 
 For word width $W = \text{DATA\_WIDTH}$, divider $D = \text{CLOCK\_DIVIDER}$, and clock frequency $f_{clk}$:
 
-- **SCLK Frequency:** $f_{sclk} = f_{clk} / (2D)$
-- **Active SCLK Cycles:** $2 \times W \times D$
-- **Total Transaction Latency:** $2WD + D + 2$ system clock cycles (from accepted start through done pulse)
-- **Active Busy Cycles:** $2WD + D + 1$ system clock cycles (`busy` deasserts to 0 in the done cycle)
-- **Back-to-Back Period:** $2WD + D + 3$ cycles (with start held continuously high)
-- **Payload Throughput:** $\frac{f_{clk} \times W}{2WD + D + 3}$ bit/s
+```text
+State       | IDLE ──► SELECT ──► TRANSFER ──► DESELECT ──► DONE ──► IDLE
+Cycle       | 0    │   1      │   2..2WD+1 │   2WD+2..  │   2WD+D+2│ 2WD+D+3
+cs_n[sel]   | 1    │   1      │   0        │   0        │   0      │ 1
+busy        | 0    │   1      │   1        │   1        │   0      │ 0
+done        | 0    │   0      │   0        │   0        │   1      │ 0
+```
 
-*Example ($f_{clk} = 50\text{ MHz}$, $W = 8$, $D = 6$):*
-$f_{sclk} = 4.167\text{ MHz}$, latency = $104\text{ cycles}$ ($2.08\ \mu\text{s}$), busy = $103\text{ cycles}$, payload throughput = $3.81\text{ Mbit/s}$.
+- **SCLK Frequency:** $f_{sclk} = \frac{f_{clk}}{2D}$
+- **Active Toggling Cycles:** $2 \times W \times D$
+- **Total Latency:** $2WD + D + 2$ system clock cycles (from accepted start through done pulse)
+- **Active Busy Duration:** $2WD + D + 1$ system clock cycles (`busy` deasserts in the done cycle)
+- **Back-to-Back Streaming Period:** $2WD + D + 3$ cycles (with start held high continuously)
+- **Streaming Throughput:** $\frac{f_{clk} \times W}{2WD + D + 3}\text{ bit/s}$
 
----
-
-## Verification Suite (`tb/spi_tb.sv`)
-
-The self-checking testbench validates the IP across **16 comprehensive verification suites** executing **74 automated assertions**:
-1. **Reset & Idle Pin Verification:** SCLK idle polarity (Modes 0–3), CS_N idle high, busy/done quiescent levels.
-2. **SPI Mode 0:** Full-duplex loopback (`CPOL=0, CPHA=0`, 8-bit, MSB-first).
-3. **SPI Mode 1:** Full-duplex loopback (`CPOL=0, CPHA=1`, 8-bit, MSB-first).
-4. **SPI Mode 2:** Full-duplex loopback (`CPOL=1, CPHA=0`, 8-bit, MSB-first).
-5. **SPI Mode 3:** Full-duplex loopback (`CPOL=1, CPHA=1`, 8-bit, MSB-first).
-6. **Performance Counters & Telemetry:** Verified measured latency ($104\text{ cycles}$), active SCLK cycles ($96\text{ cycles}$), and deterministic `perf_clear`.
-7. **Error Detection & Semantic Separation:** Verified rejection on invalid slave select, separate firing of `error` and `select_error`, and rejected start while busy.
-8. **Back-to-Back Consecutive Streaming Transfers:** Verified zero idle cycle penalty when `start` is held continuously asserted across multiple words.
-9. **16-Bit Word Transfer:** Verified parameterization for `DATA_WIDTH=16`.
-10. **32-Bit Word Transfer:** Verified parameterization for `DATA_WIDTH=32`.
-11. **LSB-First Transfer:** Verified bit-reversal and transmission order (`LSB_FIRST=1`).
-12. **Multi-Slave CS Verification:** Verified independent 1-hot decoding across 4 chip-select lines (`NUM_SLAVES=4`).
-13. **Reset During Active Transaction:** Verified immediate recovery to idle and deassertion of CS upon mid-transfer synchronous reset.
-14. **Single-Bit Transfer Boundary:** Verified corner case `DATA_WIDTH=1` for both `1'b1` and `1'b0`.
-15. **Clock Divider Minimum Boundary:** Verified exact timing boundary at `CLOCK_DIVIDER=5` (`MISO_SYNC_STAGES=1`).
-16. **Reset Lifecycle Verification:** Verified quiescent state during reset assertion before transfer, clean start recovery, and reset after transaction completion.
+*Example ($f_{clk} = 50.0\text{ MHz}, W = 8, D = 6$):*  
+$f_{sclk} = 4.167\text{ MHz}$, Latency = $104\text{ cycles}$ ($2.08\ \mu\text{s}$), Busy = $103\text{ cycles}$ ($2.06\ \mu\text{s}$), Streaming Throughput = $3.81\text{ Mbit/s}$, Protocol Efficiency = $91.43\%$.
 
 ---
 
-## Tool Verification Status
+## 9. Hardware Target: TUL PYNQ-Z2 (AMD Zynq-7020)
 
-| Tool / Target | Version | Command | Status | Result / Details |
-|---|---|---|---|---|
-| **Verilator RTL Lint** | 5.032 | `python sim/run_sim.py lint` | **PASS** | 0 warnings, 0 errors under `-Wall` |
-| **Icarus Verilog Sim** | 12.0 | `python sim/run_sim.py iverilog` | **PASS** | 74 / 74 test assertions passed |
-| **Verilator Simulation** | 5.032 | `python sim/run_sim.py sim` | **PASS** | 74 / 74 test assertions passed |
-| **AMD Vivado XSim** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode sim` | **PASS** | 74 / 74 test assertions passed ($50.491\ \mu\text{s}$) |
-| **AMD Vivado Synthesis** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -part xc7a35tcsg324-1` | **PASS** | 39 LUTs, 326 FFs, 0 BRAM, 0 DSP, 0 Latches |
-| **AMD Vivado Implementation** | 2026.1 | `vivado -mode batch -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7a35tcsg324-1` | **PASS** | Routed cleanly: WNS = +15.272 ns, WHS = +0.170 ns |
+The target hardware development board is the **TUL PYNQ-Z2**, featuring the **AMD Zynq-7020 SoC** (`xc7z020clg400-1`).
 
----
+- **Clock Architecture:**
+  - **PL Reference Clock:** 125.0 MHz single-ended clock on pin `H16` (Bank 35), sourced directly from the onboard Realtek RTL8211E-VL Gigabit Ethernet PHY (`U5`, pin 46 `CLK125`).
+  - **PHY Reset Requirement:** `PHYRSTB` must be deasserted (held high / inactive) for the Ethernet PHY clock generator to operate and drive `CLK125`.
+  - **Demonstration Clocking:** The board demonstration wrapper (`spi_pynq_z2_top.sv`) clocks the core directly from this 125.0 MHz reference clock with `CLOCK_DIVIDER = 15`, producing a 4.167 MHz SPI serial clock. This is a conservative initial operating target pending physical measurement (< 5 MHz recommended for unshielded Pmod headers).
+  - **Clock Management Reality:** **No MMCM or Clocking Wizard IP is instantiated** in this baseline RTL.
+  - **Separate 50 MHz PS Clock:** In a complete Zynq PS+PL production design, a 50 MHz clock is an entirely separate clock domain supplied by the Processing System (`FCLK_CLK0`) via an AXI-SPI bridge.
+  - **Out-of-Context (OOC) Timing Budget:** 50.0 MHz synchronous clock period (20.0 ns) constrained on `clk` in `constraints/pynq_z2/pynq_z2_timing.xdc`.
+- **Bank & Connector Allocations (TUL PYNQ-Z2 Reference Manual v1.1 & Schematic Rev C):**
+  - **Bank 35 (3.3V):** `sysclk` (H16, Ethernet PHY U5 pin 46), `reset_btn` (D19, BTN0), `start_btn` (D20, BTN1), `sw_slave_sel[1:0]` (M20, M19), `led_error` (N16, LD2), `led_active` (M14, LD3 - Transfer Active Indicator).
+  - **Bank 34 (3.3V):** Pmod B (Header JB) and Status LEDs LD[1:0]:
+    - `pad_cs_n[0]`: Pin 1 (`W14`, JB1_P)
+    - `pad_mosi`: Pin 2 (`Y14`, JB1_N)
+    - `pad_miso`: Pin 3 (`T11`, JB2_P, with internal pull-up)
+    - `pad_sclk`: Pin 4 (`T10`, JB2_N)
+    - `pad_cs_n[1]`: Pin 7 (`V16`, JB3_P)
+    - `pad_cs_n[2]`: Pin 8 (`W16`, JB3_N)
+    - `pad_cs_n[3]`: Pin 9 (`V12`, JB4_P)
+    - `led_busy`: LD0 (`R14`, Core Busy), `led_done`: LD1 (`P14`, Transfer Complete)
+- **Candidate Hardware Peripherals:**
+  - Bosch BMI160 6-Axis Inertial Measurement Unit (IMU)
+  - Microchip 25LC256 256K SPI EEPROM
 
-## FPGA Implementation & Timing Results
-
-* **Primary Synthesis Top:** `spi_master_top` (Out-of-Context IP Core)
-* **Target FPGA Device:** AMD Artix-7 `xc7a35tcsg324-1` (Representative FPGA target for synthesis & implementation analysis)
-* **Physical Board Validation:** **Not performed** (RTL / IP-core verification project; no board hardware claims made)
-* **Core Clock Constraint:** 50.000 MHz ($T = 20.000\text{ ns}$, 50% duty cycle, defined in `constraints/spi_master_top.xdc`)
-
-### Resource Utilization (`xc7a35tcsg324-1`)
-
-| Resource | Used | Available | Utilization (%) | Notes |
-|---|---|---|---|---|
-| **Slice LUTs** | 39 | 20,800 | 0.19% | Fully logic LUTs (0 LUTRAM / SRL) |
-| **Slice Registers (FF)** | 326 | 41,600 | 0.78% | 325 FDRE, 1 FDSE |
-| **Registers as Latch** | 0 | 41,600 | **0.00%** | Zero latches inferred |
-| **Slices** | 84 | 8,150 | 1.03% | 43 SLICEL, 41 SLICEM |
-| **Block RAM (Tile)** | 0 | 50 | 0.00% | No BRAM utilized |
-| **DSP48E1** | 0 | 90 | 0.00% | No DSPs utilized |
-| **Bonded IOB** | 0 | 210 | 0.00% | Out-of-Context synthesis mode |
-| **Clock Buffers (BUFG)**| 0 | 32 | 0.00% | Out-of-Context core netlist |
-
-### Post-Routing Timing Closure Summary
-
-| Metric | Result | Target / Requirement | Status |
-|---|---|---|---|
-| **Worst Negative Slack (WNS)** | **+15.272 ns** | $\ge 0.000\text{ ns}$ | **MET** |
-| **Total Negative Slack (TNS)** | **0.000 ns** | $0.000\text{ ns}$ (0 / 641 failing endpoints) | **MET** |
-| **Worst Hold Slack (WHS)** | **+0.170 ns** | $\ge 0.000\text{ ns}$ | **MET** |
-| **Total Hold Slack (THS)** | **0.000 ns** | $0.000\text{ ns}$ (0 / 641 failing endpoints) | **MET** |
-| **Worst Pulse Width Slack (WPWS)** | **+9.500 ns** | $\ge 0.000\text{ ns}$ | **MET** |
-| **Critical Path Delay** | 3.918 ns (Logic: 0.744 ns, Route: 3.174 ns) | Max Period: 20.000 ns | **MET** |
-| **Design Rule Check (DRC)** | 0 Errors, 0 Critical Warnings, 1 Advisory Warning (CFGBVS-1) | Clean | **PASS** |
-
-*All reports archived in `reports/vivado/`.*
+> [!NOTE]
+> Physical hardware pin and bank assignments are verified against the authoritative official TUL PYNQ-Z2 Reference Manual v1.1 and TUL PYNQ-Z2 Schematic (Rev C). Laboratory bench validation with physical oscilloscope probing remains pending.
 
 ---
 
-## Quick Start (Vivado, Simulation & Lint)
+## 10. Verification Strategy & Test Suites
 
-### AMD Vivado Automation Flow
-Run the reproducible batch Tcl flow from the project root:
+The design is verified using modular unit testbenches and an end-to-end integration testbench:
+
+```mermaid
+flowchart LR
+    TB["Self-Checking Test Suite (tb/)"] --> UT["Unit Tests (tb/unit/)\nClock Gen, Bit Counter, CS Ctrl,\nShift Registers, Master FSM"]
+    TB --> IT["Integration Testbench (tb/integration/spi_tb.sv)\n16 Suites, 57 Static Call Sites -> 74 Executed Checks"]
+    TB --> BT["Board Top Testbench (tb/board/tb_spi_pynq_z2_top.sv)\n7 Tests, 41 Executed Checks"]
+    IT --> PASS["74/74 Passing in CI\n(Verilator, Icarus, XSim)"]
+    BT --> PASS2["Dedicated Board Simulation"]
+```
+
+### Modular Unit Tests (`tb/unit/`):
+- `tb_spi_clock_gen.sv`: Verifies SCLK division, edge strobes, and idle states across CPOL modes.
+- `tb_spi_bit_counter.sv`: Verifies bit count tracking, rollover, and synchronous clear priority.
+- `tb_spi_cs_ctrl.sv`: Verifies registered 1-hot decoding and mutual exclusion across slaves.
+- `tb_spi_shift_regs.sv`: Verifies TX MSB/LSB serialization, preloading, and RX deserialization.
+- `tb_spi_master_fsm.sv`: Verifies 5-state Moore transaction sequencing and handshake signals.
+
+### Dedicated Board Top Testbench (`tb/board/tb_spi_pynq_z2_top.sv` - 41 Checks):
+- Validates the physical PYNQ-Z2 board demonstration wrapper `spi_pynq_z2_top.sv`:
+  - Reset assertion and quiescent output state.
+  - Start pushbutton 2-stage synchronization and contact debounce rejection.
+  - Guarantee of exactly one transaction per button press (hold test).
+  - Slide switch (`SW[1:0]`) decoding to 4 chip-select channels (`pad_cs_n[3:0]`).
+  - MOSI payload progression across consecutive transactions.
+  - Status LED behaviour: busy, transfer active, pulse-stretched done (~100 ms), and error quiescent.
+  - Serial clock toggling and chip-select frame timing.
+
+### 16 Integration Verification Suites (74 Dynamic Checks):
+The integration testbench defines 57 actual static `check_result` call sites. Due to iteration loops in Test 8 (4 iterations) and Test 12 (17 assertions across 4 slaves), the simulation executes **74 automated assertions** at runtime (**74 passed, 0 failed** in the CI run):
+1. **Reset & Idle Quiescent States:** SCLK idle polarity (Modes 0–3), CS_n idle high, busy/done quiescent levels (7 checks).
+2. **SPI Mode 0:** Full-duplex loopback (`CPOL=0, CPHA=0`, 8-bit, MSB-first) (4 checks).
+3. **SPI Mode 1:** Full-duplex loopback (`CPOL=0, CPHA=1`, 8-bit, MSB-first) (2 checks).
+4. **SPI Mode 2:** Full-duplex loopback (`CPOL=1, CPHA=0`, 8-bit, MSB-first) (2 checks).
+5. **SPI Mode 3:** Full-duplex loopback (`CPOL=1, CPHA=1`, 8-bit, MSB-first) (2 checks).
+6. **Diagnostic Telemetry:** Verified measured latency (104 cycles), SCLK cycles (96 cycles), and `perf_clear` (5 checks).
+7. **Error Detection:** Rejection on invalid slave select, separate firing of `error` and `select_error`, and rejection while busy (5 checks).
+8. **Back-to-Back Streaming:** Continuous streaming transfers with start held high (4 checks in loop).
+9. **16-Bit Word Transfer:** Parameterized verification for W=16 (2 checks).
+10. **32-Bit Word Transfer:** Parameterized verification for W=32 (2 checks).
+11. **LSB-First Transfer:** Verified bit-reversal and transmission order (`LSB_FIRST=1`) (2 checks).
+12. **Multi-Slave CS Bus:** Verified independent 1-hot decoding across 4 chip-select lines (`NUM_SLAVES=4`) (17 checks).
+13. **Mid-Transfer Reset:** Verified immediate recovery to idle and deassertion of CS upon mid-transfer reset (5 checks).
+14. **Single-Bit Word Boundary:** Verified corner case W=1 for `1'b1` and `1'b0` (4 checks).
+15. **Clock Divider Minimum Boundary:** Verified exact timing boundary at D=5 (`MISO_SYNC_STAGES=1`) (3 checks).
+16. **Reset Lifecycle:** Quiescent state during reset assertion before transfer, clean start recovery, and reset after transfer (8 checks).
+
+---
+
+## 11. Project Directory Structure
+
+```text
+PARAMETERIZED-SPI-IP-CORE/
+├── .github/
+│   └── workflows/
+│       └── spi-ci.yml                 # Automated CI workflow (lint, unit tests, integration)
+├── .gitignore                         # Vivado, simulator, Python, and editor ignore rules
+├── README.md                          # Project overview and engineering documentation
+├── constraints/
+│   └── pynq_z2/
+│       ├── pynq_z2_pins.xdc           # Physical pin mappings for TUL PYNQ-Z2 board (Bank 34/35)
+│       └── pynq_z2_timing.xdc         # 50 MHz core clock OOC timing constraint
+├── docs/
+│   ├── ARCHITECTURE.md                # System block diagrams and detailed microarchitecture
+│   ├── DESIGN_SPECIFICATION.md        # Signal tables, parameter specs, and timing equations
+│   ├── HARDWARE_INTEGRATION.md        # PYNQ-Z2 board integration and candidate peripheral guide
+│   ├── IMPLEMENTATION_STATUS.md       # Truthful subsystem and feature implementation tracker
+│   ├── PROJECT_OVERVIEW.md            # Background, motivation, problem statement, and scope
+│   └── VERIFICATION_PLAN.md           # Verification methodology, test matrix, and commands
+├── images/
+│   └── .gitkeep                       # Architectural diagrams and visual assets
+├── rtl/
+│   ├── board/
+│   │   └── spi_pynq_z2_top.sv         # PYNQ-Z2 board demonstration wrapper
+│   ├── common/
+│   │   ├── spi_pad_wrapper.sv         # SoC integration wrapper (loopback / external pads)
+│   │   └── spi_pkg.sv                 # Package constants, width helpers, and mode functions
+│   ├── master/
+│   │   ├── spi_bit_counter.sv         # Frame bit counter and rollover flag
+│   │   ├── spi_clock_gen.sv           # SCLK generator and timing strobe logic
+│   │   ├── spi_cs_ctrl.sv             # Active-low chip-select decoder with registered outputs
+│   │   ├── spi_master.sv              # Core SPI master controller
+│   │   ├── spi_master_fsm.sv          # 5-state Moore transaction sequencing engine
+│   │   ├── spi_master_top.sv          # Master top-level with diagnostic telemetry hooks
+│   │   ├── spi_perf_counters.sv       # Hardware performance and latency measurement counters
+│   │   ├── spi_rx_shift.sv            # Receive shift register (MSB/LSB-first)
+│   │   ├── spi_top.sv                 # Backward-compatibility alias wrapper
+│   │   └── spi_tx_shift.sv            # Transmit shift register with registered serial output
+│   ├── scheduler/
+│   │   └── README.md                  # Planned multi-device transaction scheduler specification
+│   └── slave/
+│       ├── spi_slave.sv               # Synchronous SPI slave with input synchronizers
+│       └── spi_slave_top.sv           # Slave top-level with tri-state MISO pad driver
+├── scripts/
+│   ├── lint.ps1                       # PowerShell lint runner
+│   ├── sim.ps1                        # PowerShell simulation runner
+│   └── vivado/
+│       └── run_vivado.tcl             # Reproducible AMD Vivado batch automation script
+├── sim/
+│   ├── Makefile                       # Make automation for lint, unit tests, and simulation
+│   ├── filelist_rtl.f                 # RTL compilation source manifest
+│   ├── filelist_tb.f                  # Testbench compilation manifest
+│   ├── run_sim.ps1                    # PowerShell testbench runner
+│   ├── run_sim.py                     # Cross-platform Python runner (lint, unit tests, sim)
+│   └── sim_main.cpp                   # Verilator C++ testbench harness
+└── tb/
+    ├── board/
+    │   └── tb_spi_pynq_z2_top.sv      # Dedicated board demonstration top testbench (41 checks)
+    ├── integration/
+    │   └── spi_tb.sv                  # Comprehensive 16-suite self-checking testbench (74 checks)
+    └── unit/
+        ├── tb_spi_bit_counter.sv      # Unit testbench for bit counter
+        ├── tb_spi_clock_gen.sv        # Unit testbench for clock generator
+        ├── tb_spi_cs_ctrl.sv          # Unit testbench for chip-select controller
+        ├── tb_spi_master_fsm.sv       # Unit testbench for master FSM
+        └── tb_spi_shift_regs.sv       # Unit testbench for shift registers
+```
+
+---
+
+## 12. Development Environment & Quick Start
+
+### Prerequisites
+- **SystemVerilog Simulator:** Verilator (v5.032+ recommended) or Icarus Verilog (`iverilog` v12.0+).
+- **FPGA Toolchain:** AMD Vivado (v2022.2 or later).
+- **Scripting:** Python 3.8+ or PowerShell 5.1+.
+
+### Running Verification & Simulation
+
 ```bash
-# 1. Non-device-specific RTL Elaboration & AST Analysis
-vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate -top spi_master_top
+# 1. Run Verilator Lint
+python sim/run_sim.py lint
+# or via Make
+make -C sim lint
 
-# 2. Complete Synthesis & Implementation Flow (Artix-7 xc7a35tcsg324-1)
-vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_master_top -part xc7a35tcsg324-1
+# 2. Run Modular Unit Tests
+python sim/run_sim.py unit
+# or via Make
+make -C sim unit
+
+# 3. Run Dedicated Board Top Testbench
+python sim/run_sim.py board
+# or via Make
+make -C sim board
+
+# 4. Run Complete Integration Simulation (Icarus Verilog)
+python sim/run_sim.py integration
+# or via Make
+make -C sim integration
+
+# 5. Run Modern Verilator Simulation
+python sim/run_sim.py sim
+# or via Make
+make -C sim sim
+```
+
+### Running AMD Vivado Automation Flow
+
+```bash
+# 1. Out-of-Context IP Core Flow (spi_master_top with 50 MHz timing budget)
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -top spi_master_top
+
+# 2. Physical Board Demonstration & Bitstream Flow (spi_pynq_z2_top -> build/bitstream/spi_pynq_z2_top.bit)
+vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_pynq_z2_top -part xc7z020clg400-1
 
 # 3. AMD Vivado XSim Functional Simulation
 vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode sim
 ```
 
-### Verilator Lint
-```bash
-python sim/run_sim.py lint
-# or using Makefile:
-make -C sim lint
-```
+---
 
-### Icarus Verilog Simulation
-```bash
-python sim/run_sim.py iverilog
-# or using Makefile:
-make -C sim sim-iverilog
-```
+## 13. Current Implementation Status Summary
 
-### Verilator Simulation
-```bash
-python sim/run_sim.py sim
-# or using Makefile:
-make -C sim sim
-```
+| Subsystem / Capability | Status |
+|---|:---:|
+| Core SPI Master & Submodules | **Simulation Verified** (74/74 CI checks pass) |
+| Modular Unit Testbenches (5 suites) | **Simulation Verified** |
+| 16-Suite Integration Testbench (74 Assertions) | **Simulation Verified** (57 static calls, 74 dynamic checks) |
+| Board Demonstration Top (`spi_pynq_z2_top.sv`) | **Simulation Verified** |
+| Dedicated Board Top Testbench (`tb_spi_pynq_z2_top.sv`) | **Simulation Verified** (41 passed, 0 failed) |
+| PYNQ-Z2 Physical Pin Constraints (`pynq_z2_pins.xdc`) | **Implemented — Reference Verified** |
+| Vivado Implementation Batch Flow (`run_vivado.tcl`) | **Implemented — Flow Scripted** |
+| Multi-Device Transaction Scheduler RTL | **Planned (Not Started)** |
+| Physical Silicon Testing on PYNQ-Z2 | **Planned (Proposed)** |
 
-### Waveform Inspection
-Waveforms are dumped to `sim/spi_tb.vcd` and can be viewed using GTKWave:
-```bash
-gtkwave sim/spi_tb.vcd
-```
+*For complete component-by-component details, consult [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).*
 
+---
+
+## 14. Future Improvements & Planned Roadmap
+
+1. **Multi-Device Scheduler Subsystem (Milestone M2–M4):** Implement synthesizable arbiter logic, descriptor request FIFO, and result telemetry FIFO in `rtl/scheduler/`.
+2. **AXI4-Lite Peripheral Bridge:** Add an optional memory-mapped slave register interface for direct integration into Zynq Processing System (PS) interconnects.
+3. **Physical Hardware Validation (Milestone M5):** Deploy the bitstream to the TUL PYNQ-Z2 board and perform oscilloscope verification with Bosch BMI160 and Microchip 25LC256 peripherals.
+4. **UVM Verification Environment:** Develop a Universal Verification Methodology (UVM) constrained-random test environment with functional coverage metrics.
+
+---
+
+## 15. Contributors
+
+- **Navadeep Kumar Reddy** ([@NAVADEEP2006-cmd](https://github.com/NAVADEEP2006-cmd)) — RTL architecture, SystemVerilog implementation, and verification testbenches.
+
+---
+
+## 16. Project Engineering Disclaimer
+
+This repository adheres strictly to verified engineering evidence:
+- All implementation and verification claims in this documentation reflect actual RTL and testbench execution results.
+- Features not yet implemented (such as the autonomous multi-device scheduler and AXI4-Lite bridge) are explicitly designated as planned extensions.
+- Hardware pin mappings for the TUL PYNQ-Z2 board are documented directly from official schematics, and physical laboratory testing is explicitly identified as pending validation.
+- No fabricated FPGA resource utilization counts, false timing figures, or unverified hardware results are included.

@@ -1,16 +1,24 @@
 # ==============================================================================
 # run_vivado.tcl - Reproducible AMD Vivado Automation Flow for SPI IP Core
 #
+# Target Platform:    TUL PYNQ-Z2 (AMD Zynq-7020 xc7z020clg400-1)
 # Supported execution modes:
 #   -mode elaborate : Perform non-device-specific RTL elaboration & design analysis
-#   -mode synth     : Synthesize IP core for the specified target FPGA part (OOC)
-#   -mode impl      : Run complete flow: Synthesis -> opt -> place -> phys_opt -> route
+#   -mode synth     : Synthesize IP core or board top for target FPGA part
+#   -mode impl      : Run complete flow: Synthesis -> opt -> place -> phys_opt -> route -> write_bitstream (board top)
 #   -mode sim       : Execute functional verification using AMD Vivado XSim
 #   -mode all       : Run implementation flow followed by XSim functional verification
 #
+# Target Configurations:
+#   1. Out-of-Context (OOC) IP Core Flow:
+#      -top spi_master_top  -xdc constraints/pynq_z2/pynq_z2_timing.xdc (50 MHz clk)
+#   2. Physical Board Demonstration Flow:
+#      -top spi_pynq_z2_top -xdc constraints/pynq_z2/pynq_z2_pins.xdc   (125 MHz sysclk + pins -> bitstream)
+#
 # Usage examples:
 #   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate
-#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -part xc7a35tcsg324-1
+#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -top spi_master_top
+#   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_pynq_z2_top
 #   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode sim
 # ==============================================================================
 
@@ -18,14 +26,15 @@ set SCRIPT_DIR  [file normalize [file dirname [info script]]]
 set REPO_DIR    [file normalize "$SCRIPT_DIR/../.."]
 set RTL_DIR     "$REPO_DIR/rtl"
 set TB_DIR      "$REPO_DIR/tb"
-set CONSTR_DIR  "$REPO_DIR/constraints"
-set REPORTS_DIR "$REPO_DIR/reports/vivado"
+set CONSTR_DIR    "$REPO_DIR/constraints/pynq_z2"
+set REPORTS_DIR   "$REPO_DIR/reports/vivado"
+set BITSTREAM_DIR "$REPO_DIR/build/bitstream"
 
-# Default configuration
+# Default configuration targeting PYNQ-Z2 Zynq-7020
 set MODE        "elaborate"
 set TOP         "spi_master_top"
-set PART        "xc7a35tcsg324-1"
-set CONSTRAINTS "$CONSTR_DIR/spi_master_top.xdc"
+set PART        "xc7z020clg400-1"
+set CONSTRAINTS ""
 
 # Parse command line arguments
 for {set i 0} {$i < [llength $argv]} {incr i} {
@@ -42,6 +51,22 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
     }
 }
 
+# Determine default constraint file based on selected top module if not explicitly set
+if {$CONSTRAINTS eq ""} {
+    if {$TOP eq "spi_pynq_z2_top"} {
+        set CONSTRAINTS "$CONSTR_DIR/pynq_z2_pins.xdc"
+    } else {
+        set CONSTRAINTS "$CONSTR_DIR/pynq_z2_timing.xdc"
+    }
+}
+
+# Determine whether flow is Out-of-Context (OOC)
+# Reusable IP cores (spi_master_top, spi_pad_wrapper) run OOC; board top runs full board flow
+set IS_OOC 1
+if {$TOP eq "spi_pynq_z2_top"} {
+    set IS_OOC 0
+}
+
 file mkdir $REPORTS_DIR
 
 puts "=================================================================="
@@ -49,25 +74,28 @@ puts "  AMD Vivado IP Core Automation Flow"
 puts "  Repository Root : $REPO_DIR"
 puts "  Mode            : $MODE"
 puts "  Top Module      : $TOP"
-puts "  FPGA Part       : $PART"
+puts "  Flow Type       : [expr {$IS_OOC ? {Out-of-Context (OOC) IP Core} : {Board-Level Implementation}}]"
+puts "  Constraint File : $CONSTRAINTS"
+puts "  Target Part     : $PART (TUL PYNQ-Z2)"
 puts "=================================================================="
 
 # RTL Compilation Order: spi_pkg MUST be compiled first
 set RTL_SOURCES [list \
-    "$RTL_DIR/spi_pkg.sv" \
-    "$RTL_DIR/spi_clock_gen.sv" \
-    "$RTL_DIR/spi_bit_counter.sv" \
-    "$RTL_DIR/spi_tx_shift.sv" \
-    "$RTL_DIR/spi_rx_shift.sv" \
-    "$RTL_DIR/spi_cs_ctrl.sv" \
-    "$RTL_DIR/spi_master_fsm.sv" \
-    "$RTL_DIR/spi_perf_counters.sv" \
-    "$RTL_DIR/spi_master.sv" \
-    "$RTL_DIR/spi_master_top.sv" \
-    "$RTL_DIR/spi_top.sv" \
-    "$RTL_DIR/spi_slave.sv" \
-    "$RTL_DIR/spi_slave_top.sv" \
-    "$RTL_DIR/spi_pad_wrapper.sv" \
+    "$RTL_DIR/common/spi_pkg.sv" \
+    "$RTL_DIR/master/spi_clock_gen.sv" \
+    "$RTL_DIR/master/spi_bit_counter.sv" \
+    "$RTL_DIR/master/spi_tx_shift.sv" \
+    "$RTL_DIR/master/spi_rx_shift.sv" \
+    "$RTL_DIR/master/spi_cs_ctrl.sv" \
+    "$RTL_DIR/master/spi_master_fsm.sv" \
+    "$RTL_DIR/master/spi_perf_counters.sv" \
+    "$RTL_DIR/master/spi_master.sv" \
+    "$RTL_DIR/master/spi_master_top.sv" \
+    "$RTL_DIR/master/spi_top.sv" \
+    "$RTL_DIR/slave/spi_slave.sv" \
+    "$RTL_DIR/slave/spi_slave_top.sv" \
+    "$RTL_DIR/common/spi_pad_wrapper.sv" \
+    "$RTL_DIR/board/spi_pynq_z2_top.sv" \
 ]
 
 proc read_all_rtl {} {
@@ -94,7 +122,7 @@ proc run_xsim_sim {} {
     foreach src $RTL_SOURCES {
         lappend xvlog_args $src
     }
-    lappend xvlog_args "$TB_DIR/spi_tb.sv"
+    lappend xvlog_args "$TB_DIR/integration/spi_tb.sv"
     
     if {[catch {exec {*}$xvlog_args} xvlog_out]} {
         puts $xvlog_out
@@ -170,7 +198,13 @@ if {$MODE eq "synth"} {
         puts "\[WARNING\] Constraint file not found: $CONSTRAINTS. Proceeding without timing constraints."
     }
     
-    synth_design -top $TOP -part $PART -mode out_of_context
+    if {$IS_OOC} {
+        puts "--- Running synth_design (Out-of-Context) ---"
+        synth_design -top $TOP -part $PART -mode out_of_context
+    } else {
+        puts "--- Running synth_design (Full Board) ---"
+        synth_design -top $TOP -part $PART
+    }
     
     report_utilization -file "$REPORTS_DIR/synthesis_utilization.rpt"
     report_timing_summary -file "$REPORTS_DIR/synthesis_timing.rpt"
@@ -182,7 +216,7 @@ if {$MODE eq "synth"} {
 # ------------------------------------------------------------------------------
 if {$MODE eq "impl" || $MODE eq "all"} {
     puts "\n=================================================================="
-    puts "  Stage: Out-of-Context Logic Synthesis ($TOP) on $PART"
+    puts "  Stage: Logic Synthesis ($TOP) on $PART"
     puts "=================================================================="
     if {$PART eq ""} {
         error "ERROR: FPGA target part must be specified via '-part <part>' for implementation."
@@ -197,8 +231,13 @@ if {$MODE eq "impl" || $MODE eq "all"} {
         puts "\[WARNING\] Constraint file not found: $CONSTRAINTS. Proceeding without timing constraints."
     }
     
-    puts "--- Running synth_design (out-of-context) ---"
-    synth_design -top $TOP -part $PART -mode out_of_context
+    if {$IS_OOC} {
+        puts "--- Running synth_design (Out-of-Context) ---"
+        synth_design -top $TOP -part $PART -mode out_of_context
+    } else {
+        puts "--- Running synth_design (Full Board) ---"
+        synth_design -top $TOP -part $PART
+    }
     
     report_utilization -file "$REPORTS_DIR/synthesis_utilization.rpt"
     report_timing_summary -file "$REPORTS_DIR/synthesis_timing.rpt"
@@ -226,6 +265,38 @@ if {$MODE eq "impl" || $MODE eq "all"} {
     report_drc -file "$REPORTS_DIR/drc.rpt"
     
     puts "\[INFO\] Implementation complete. Reports written to $REPORTS_DIR"
+
+    # --------------------------------------------------------------------------
+    # Bitstream Generation (Board-Level Implementation Only)
+    # --------------------------------------------------------------------------
+    if {!$IS_OOC} {
+        puts "\n=================================================================="
+        puts "  Stage: Bitstream Generation ($TOP)"
+        puts "=================================================================="
+        
+        # Verify routing status before attempting bitstream generation
+        set unrouted_nets [get_nets -hierarchical -filter {ROUTE_STATUS == "UNROUTED" || ROUTE_STATUS == "CONFLICTS"}]
+        if {[llength $unrouted_nets] > 0} {
+            error "ERROR: Routing incomplete ([llength $unrouted_nets] unrouted/conflicted nets). Bitstream generation aborted."
+        }
+        
+        file mkdir $BITSTREAM_DIR
+        set bit_file [file normalize "$BITSTREAM_DIR/${TOP}.bit"]
+        
+        puts "--- Writing Bitstream: $bit_file ---"
+        write_bitstream -force $bit_file
+        
+        if {![file exists $bit_file]} {
+            error "ERROR: write_bitstream completed but output file does not exist: $bit_file"
+        }
+        
+        set bit_size [file size $bit_file]
+        puts "\[INFO\] Bitstream generated successfully."
+        puts "\[INFO\] Exact Bitstream Location: $bit_file"
+        puts "\[INFO\] Bitstream File Size    : $bit_size bytes"
+    } else {
+        puts "\[INFO\] Out-of-Context flow: Skipping bitstream generation (OOC IP mode)."
+    }
 }
 
 # ------------------------------------------------------------------------------
