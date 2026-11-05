@@ -172,34 +172,34 @@ module spi_pynq_z2_top
   // 4. Output Status LED Drive & Activity Pulse Extension
   // ---------------------------------------------------------------------------
   // Pulse-stretch 'done' and 'error' so brief events are clearly visible to human eye
-  logic [23:0] done_stretch_cnt;
+  logic [27:0] done_stretch_cnt;
   logic        done_led_reg;
-  logic [23:0] err_stretch_cnt;
+  logic [27:0] err_stretch_cnt;
   logic        err_led_reg;
 
   always_ff @(posedge sysclk) begin
     if (core_reset) begin
-      done_stretch_cnt <= 24'd0;
+      done_stretch_cnt <= 28'd0;
       done_led_reg     <= 1'b0;
-      err_stretch_cnt  <= 24'd0;
+      err_stretch_cnt  <= 28'd0;
       err_led_reg      <= 1'b0;
     end else begin
       // Done stretch: ~100 ms at 125 MHz (12,500,000 cycles)
       if (core_done) begin
-        done_stretch_cnt <= 24'd12_500_000;
+        done_stretch_cnt <= 28'd12_500_000;
         done_led_reg     <= 1'b1;
-      end else if (done_stretch_cnt > 24'd0) begin
-        done_stretch_cnt <= done_stretch_cnt - 24'd1;
+      end else if (done_stretch_cnt > 28'd0) begin
+        done_stretch_cnt <= done_stretch_cnt - 28'd1;
       end else begin
         done_led_reg     <= 1'b0;
       end
 
-      // Error stretch: ~250 ms at 125 MHz
+      // Error stretch: ~250 ms at 125 MHz (31,250,000 cycles)
       if (core_error || core_select_error) begin
-        err_stretch_cnt <= 24'd31_250_000;
+        err_stretch_cnt <= 28'd31_250_000;
         err_led_reg     <= 1'b1;
-      end else if (err_stretch_cnt > 24'd0) begin
-        err_stretch_cnt <= err_stretch_cnt - 24'd1;
+      end else if (err_stretch_cnt > 28'd0) begin
+        err_stretch_cnt <= err_stretch_cnt - 28'd1;
       end else begin
         err_led_reg     <= 1'b0;
       end
