@@ -5,7 +5,7 @@
 # Supported execution modes:
 #   -mode elaborate : Perform non-device-specific RTL elaboration & design analysis
 #   -mode synth     : Synthesize IP core or board top for target FPGA part
-#   -mode impl      : Run complete flow: Synthesis -> opt -> place -> phys_opt -> route
+#   -mode impl      : Run complete flow: Synthesis -> opt -> place -> phys_opt -> route -> write_bitstream (board top)
 #   -mode sim       : Execute functional verification using AMD Vivado XSim
 #   -mode all       : Run implementation flow followed by XSim functional verification
 #
@@ -13,7 +13,7 @@
 #   1. Out-of-Context (OOC) IP Core Flow:
 #      -top spi_master_top  -xdc constraints/pynq_z2/pynq_z2_timing.xdc (50 MHz clk)
 #   2. Physical Board Demonstration Flow:
-#      -top spi_pynq_z2_top -xdc constraints/pynq_z2/pynq_z2_pins.xdc   (125 MHz sysclk + pins)
+#      -top spi_pynq_z2_top -xdc constraints/pynq_z2/pynq_z2_pins.xdc   (125 MHz sysclk + pins -> bitstream)
 #
 # Usage examples:
 #   vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode elaborate
@@ -26,8 +26,9 @@ set SCRIPT_DIR  [file normalize [file dirname [info script]]]
 set REPO_DIR    [file normalize "$SCRIPT_DIR/../.."]
 set RTL_DIR     "$REPO_DIR/rtl"
 set TB_DIR      "$REPO_DIR/tb"
-set CONSTR_DIR  "$REPO_DIR/constraints/pynq_z2"
-set REPORTS_DIR "$REPO_DIR/reports/vivado"
+set CONSTR_DIR    "$REPO_DIR/constraints/pynq_z2"
+set REPORTS_DIR   "$REPO_DIR/reports/vivado"
+set BITSTREAM_DIR "$REPO_DIR/build/bitstream"
 
 # Default configuration targeting PYNQ-Z2 Zynq-7020
 set MODE        "elaborate"
@@ -264,6 +265,38 @@ if {$MODE eq "impl" || $MODE eq "all"} {
     report_drc -file "$REPORTS_DIR/drc.rpt"
     
     puts "\[INFO\] Implementation complete. Reports written to $REPORTS_DIR"
+
+    # --------------------------------------------------------------------------
+    # Bitstream Generation (Board-Level Implementation Only)
+    # --------------------------------------------------------------------------
+    if {!$IS_OOC} {
+        puts "\n=================================================================="
+        puts "  Stage: Bitstream Generation ($TOP)"
+        puts "=================================================================="
+        
+        # Verify routing status before attempting bitstream generation
+        set unrouted_nets [get_nets -hierarchical -filter {ROUTE_STATUS == "UNROUTED" || ROUTE_STATUS == "CONFLICTS"}]
+        if {[llength $unrouted_nets] > 0} {
+            error "ERROR: Routing incomplete ([llength $unrouted_nets] unrouted/conflicted nets). Bitstream generation aborted."
+        }
+        
+        file mkdir $BITSTREAM_DIR
+        set bit_file [file normalize "$BITSTREAM_DIR/${TOP}.bit"]
+        
+        puts "--- Writing Bitstream: $bit_file ---"
+        write_bitstream -force $bit_file
+        
+        if {![file exists $bit_file]} {
+            error "ERROR: write_bitstream completed but output file does not exist: $bit_file"
+        }
+        
+        set bit_size [file size $bit_file]
+        puts "\[INFO\] Bitstream generated successfully."
+        puts "\[INFO\] Exact Bitstream Location: $bit_file"
+        puts "\[INFO\] Bitstream File Size    : $bit_size bytes"
+    } else {
+        puts "\[INFO\] Out-of-Context flow: Skipping bitstream generation (OOC IP mode)."
+    }
 }
 
 # ------------------------------------------------------------------------------

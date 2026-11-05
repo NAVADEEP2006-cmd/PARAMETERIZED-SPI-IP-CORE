@@ -173,10 +173,11 @@ The target hardware development board is the **TUL PYNQ-Z2**, featuring the **AM
 
 - **Clock Architecture:**
   - **PL Reference Clock:** 125.0 MHz single-ended clock on pin `H16` (Bank 35), sourced directly from the onboard Realtek RTL8211E-VL Gigabit Ethernet PHY (`U5`, pin 46 `CLK125`).
+  - **PHY Reset Requirement:** `PHYRSTB` must be deasserted (held high / inactive) for the Ethernet PHY clock generator to operate and drive `CLK125`.
   - **Demonstration Clocking:** The board demonstration wrapper (`spi_pynq_z2_top.sv`) clocks the core directly from this 125.0 MHz reference clock with `CLOCK_DIVIDER = 15`, producing a 4.167 MHz SPI serial clock. This is a conservative initial operating target pending physical measurement (< 5 MHz recommended for unshielded Pmod headers).
   - **Clock Management Reality:** **No MMCM or Clocking Wizard IP is instantiated** in this baseline RTL.
-  - **SoC Production Target:** In a complete Zynq PS+PL production design, a 50 MHz clock is supplied by the Processing System (`FCLK_CLK0`) via an AXI-SPI bridge.
-  - **Out-of-Context (OOC) Timing Budget:** 50.0 MHz synchronous clock period (20.000 ns) constrained on `clk` in `constraints/pynq_z2/pynq_z2_timing.xdc`.
+  - **Separate 50 MHz PS Clock:** In a complete Zynq PS+PL production design, a 50 MHz clock is an entirely separate clock domain supplied by the Processing System (`FCLK_CLK0`) via an AXI-SPI bridge.
+  - **Out-of-Context (OOC) Timing Budget:** 50.0 MHz synchronous clock period (20.0 ns) constrained on `clk` in `constraints/pynq_z2/pynq_z2_timing.xdc`.
 - **Bank & Connector Allocations (TUL PYNQ-Z2 Reference Manual v1.1 & Schematic Rev C):**
   - **Bank 35 (3.3V):** `sysclk` (H16, Ethernet PHY U5 pin 46), `reset_btn` (D19, BTN0), `start_btn` (D20, BTN1), `sw_slave_sel[1:0]` (M20, M19), `led_error` (N16, LD2), `led_active` (M14, LD3 - Transfer Active Indicator).
   - **Bank 34 (3.3V):** Pmod B (Header JB) and Status LEDs LD[1:0]:
@@ -361,7 +362,7 @@ make -C sim sim
 # 1. Out-of-Context IP Core Flow (spi_master_top with 50 MHz timing budget)
 vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode synth -top spi_master_top
 
-# 2. Physical Board Demonstration Flow (spi_pynq_z2_top with PYNQ-Z2 pin constraints)
+# 2. Physical Board Demonstration & Bitstream Flow (spi_pynq_z2_top -> build/bitstream/spi_pynq_z2_top.bit)
 vivado -mode batch -notrace -source scripts/vivado/run_vivado.tcl -tclargs -mode impl -top spi_pynq_z2_top -part xc7z020clg400-1
 
 # 3. AMD Vivado XSim Functional Simulation

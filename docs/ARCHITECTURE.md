@@ -263,3 +263,10 @@ flowchart TD
 
 1. **`spi_pad_wrapper.sv` (Simulation & Loopback):** Provides pad-level modeling, bidirectional tri-state MISO emulation, and self-testing loopback interconnect between master and an internal slave.
 2. **`spi_pynq_z2_top.sv` (Hardware Lab Demonstration):** Bridges physical PYNQ-Z2 board pins (125 MHz clock on H16 from Ethernet PHY U5 pin 46, debounced pushbuttons, switches, LEDs) to the reusable IP core without requiring an external AXI master or unconstrained bitstream synthesis. SCLK operates at 4.167 MHz ($125\text{ MHz} / (2 \times 15)$), serving as a conservative initial operating target pending physical measurement (< 5 MHz recommended for unshielded Pmod headers).
+
+> [!NOTE]
+> **Clock Architecture & PHY Dependencies:**
+> - Pin `H16` receives the 125 MHz single-ended PL reference clock directly from the onboard Realtek RTL8211E-VL Gigabit Ethernet PHY (`U5`, pin 46, `CLK125`).
+> - Hardware Dependency: `PHYRSTB` must be deasserted (held high / inactive) for the PHY's internal clock synthesizer to operate and output `CLK125`.
+> - The 50 MHz PS clock (`FCLK_CLK0`) is an entirely separate clock domain supplied by the Zynq Processing System.
+> - **No MMCM or Clocking Wizard IP is instantiated** in this baseline RTL.
